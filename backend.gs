@@ -384,6 +384,8 @@ function checkin(data) {
       status: 'ok',
       checkedIn: false,
       needPayment: true,
+      name: member.name,
+      course: course,
       fee: feeInfo.fee,
       receiptItem: feeInfo.item,
       message: '請到櫃檯繳費，幹部會提供領收據密碼'

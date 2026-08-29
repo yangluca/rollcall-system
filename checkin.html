@@ -149,12 +149,15 @@ function renderResult(data) {
     return;
   }
 
+  const memberName = (data.member && data.member.name) || data.name || '同學';
+  const courseName = (data.course && data.course.name) || '';
+
   if (data.checkedIn) {
     // 已簽到無需繳費
     let html = `
       <div class="status ok"><span>✓</span>簽到成功</div>
       <div class="detail">
-        <b>${data.member.name}</b>您已完成今日 <b>${data.course.name}</b> 簽到。<br>
+        <b>${memberName}</b>您已完成今日 <b>${courseName}</b> 簽到。<br>
         ${data.fee === 0 ? '本堂無需繳費。' : ''}
       </div>
     `;
@@ -165,8 +168,8 @@ function renderResult(data) {
         html += `
           <div class="history-item">
             <div class="info">
-              <div><b>${h.receiptItem}</b></div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px;">${h.courseDate}</div>
+              <div><b>${h.receiptItem || ''}</b></div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">${h.courseDate || ''}</div>
             </div>
             <div>
               <span class="tag">${formatMoney(h.fee)}</span>
@@ -183,7 +186,7 @@ function renderResult(data) {
     $('resultContent').innerHTML = `
       <div class="status pay"><span>$</span>需要繳費</div>
       <div class="detail">
-        <b>${data.member.name}</b>請到櫃檯繳交現金，幹部確認後會提供領收據密碼。
+        <b>${memberName}</b>請到櫃檯繳交現金，幹部確認後會提供領收據密碼。
       </div>
       <div class="fee-box">
         <div class="amount">${formatMoney(data.fee)}</div>
