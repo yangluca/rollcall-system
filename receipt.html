@@ -264,8 +264,8 @@ async function renderReceiptCanvas(receipt) {
     ctx.fillText(cnDigit[parseInt(feeStr[i])], W * shiftedDigitX[startIdx + i], H * 0.815);
   }
 
-  // 社團章：傾斜 20% 蓋在收據專用章下方空格
-  await drawStamp(ctx, W * 0.62, H * 0.64, Math.min(W, H) * 0.28);
+  // 社團章：傾斜 20% 蓋在收據專用章下方空格，往右 20%、放大 2.5 倍
+  await drawStamp(ctx, W * 0.82, H * 0.64, Math.min(W, H) * 0.70);
 
   return canvas;
 }
