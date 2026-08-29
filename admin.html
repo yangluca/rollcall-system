@@ -112,7 +112,22 @@ async function callAPI(action, payload) {
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({ action, ...payload })
   });
-  return res.json();
+  let text;
+  try {
+    text = await res.text();
+  } catch (e) {
+    throw new Error('無法讀取伺服器回應');
+  }
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    throw new Error('伺服器回傳非預期內容：' + text.slice(0, 300));
+  }
+  if (json.status === 'error') {
+    throw new Error(json.message || '伺服器錯誤');
+  }
+  return json;
 }
 
 // 模式切換
@@ -143,7 +158,7 @@ $('btnLocate').addEventListener('click', async () => {
     const data = await callAPI('locate', { staffPassword, last4 });
     renderLocateResult(data, staffPassword, last4);
   } catch (err) {
-    showResult('err', '連線發生問題');
+    showResult('err', err.message || '連線發生問題');
   } finally {
     $('btnLocate').disabled = false;
   }
@@ -188,7 +203,7 @@ function renderLocateResult(data, staffPassword, last4) {
         const confirmData = await callAPI('confirm', { staffPassword, last4 });
         renderConfirmResult(confirmData);
       } catch (err) {
-        showResult('err', '連線發生問題');
+        showResult('err', err.message || '連線發生問題');
       }
     });
   }
@@ -246,7 +261,7 @@ $('btnManual').addEventListener('click', async () => {
       showResult('ok', `${name} 代簽到成功，本堂無需繳費。`);
     }
   } catch (err) {
-    showResult('err', '連線發生問題');
+    showResult('err', err.message || '連線發生問題');
   } finally {
     $('btnManual').disabled = false;
   }

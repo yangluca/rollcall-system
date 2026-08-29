@@ -85,12 +85,14 @@ function getActiveCourse() {
     const date = row[0];
     const active = row[3];
 
-    if (!date || !active) continue;
+    const activeVal = (active === true || active === 'TRUE' || active === 'true' || active === 1);
+    if (!date || !activeVal) continue;
 
-    const courseDate = new Date(date);
+    const courseDate = parseDateValue(date);
+    if (!courseDate) continue;
     courseDate.setHours(0, 0, 0, 0);
 
-    if (courseDate.getTime() === today.getTime() && active === true) {
+    if (courseDate.getTime() === today.getTime()) {
       return {
         date: formatDate(courseDate),
         name: row[1],
@@ -99,6 +101,23 @@ function getActiveCourse() {
     }
   }
   return null;
+}
+
+// 解析課程日期：自動辨識民國年（≤200 視為民國年，+1911 轉西元）
+// 支援格式：115/8/30、2026/8/30、2026-08-30、或 Sheets 日期物件
+function parseDateValue(raw) {
+  if (!raw) return null;
+  let d;
+  if (raw instanceof Date) {
+    d = new Date(raw.getTime());
+  } else {
+    d = new Date(raw);
+  }
+  if (isNaN(d.getTime())) return null;
+  if (d.getFullYear() <= 200) {
+    d.setFullYear(d.getFullYear() + 1911);
+  }
+  return d;
 }
 
 function formatDate(date) {
