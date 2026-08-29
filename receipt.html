@@ -31,14 +31,7 @@
   .receipt-wrap{width:100%; max-width:360px; margin:0 auto; transform-style:preserve-3d; transition:transform .1s; cursor:grab;}
   .receipt-wrap:active{cursor:grabbing;}
   .receipt{position:relative; width:100%; border-radius:8px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.18); background:#fff;}
-  .receipt img{width:100%; display:block;}
-  .overlay{position:absolute; inset:0; pointer-events:none;}
-  .ov{position:absolute; color:#2b4a9e; font-weight:400; line-height:1; white-space:nowrap; font-family:'ChenYuluoyan','PingFang TC',sans-serif;}
-  .ov.name{font-size:36px; letter-spacing:.08em;}
-  .ov.item{font-size:26px; letter-spacing:.04em;}
-  .ov.num{font-size:26px;}
-  .ov.date{font-size:22px; letter-spacing:.02em;}
-  .ov.total{font-size:26px;}
+  .receipt canvas{width:100%; display:block; border-radius:8px;}
   .actions{display:flex; gap:10px; margin-top:16px;}
   .actions .btn{flex:1; margin-top:0;}
   .result{display:none;}
@@ -72,8 +65,7 @@
   <div class="receipt-stage" id="receiptStage">
     <div class="receipt-wrap idle" id="receiptWrap">
       <div class="receipt" id="receipt">
-        <img src="receipt-scan.jpg" alt="收據" id="receiptImg">
-        <div class="overlay" id="overlay"></div>
+        <canvas id="receiptCanvas" style="width:100%;display:block;border-radius:8px;"></canvas>
       </div>
     </div>
   </div>
@@ -124,34 +116,6 @@ function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
-function renderOverlay(receipt) {
-  const date = new Date(receipt.courseDate);
-  const rocYear = date.getFullYear() - 1911;
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const fee = Number(receipt.fee);
-
-  // 分解金額到 萬/仟/佰/拾/元
-  const s = String(fee).padStart(5, '0');
-  const digits = s.split(''); // [萬,仟,佰,拾,元]
-
-  $('overlay').innerHTML = `
-    <div class="ov name" style="left:22%; top:11%;">${receipt.name}</div>
-    <div class="ov date" style="left:68.5%; top:13%;">${rocYear}</div>
-    <div class="ov date" style="left:79%; top:13%;">${month}</div>
-    <div class="ov date" style="left:90%; top:13%;">${day}</div>
-    <div class="ov item" style="left:9%; top:28%;">${receipt.receiptItem}</div>
-    <div class="ov num" style="left:35%; top:28%;">1</div>
-    <div class="ov num" style="left:44.5%; top:28%;">${fee}</div>
-    <div class="ov num" style="left:57%; top:28%;">${fee}</div>
-    <div class="ov total" style="left:31.5%; top:81.5%;">${digits[0]}</div>
-    <div class="ov total" style="left:40.5%; top:81.5%;">${digits[1]}</div>
-    <div class="ov total" style="left:49.5%; top:81.5%;">${digits[2]}</div>
-    <div class="ov total" style="left:58.5%; top:81.5%;">${digits[3]}</div>
-    <div class="ov total" style="left:67.5%; top:81.5%;">${digits[4]}</div>
-  `;
-}
-
 $('btnRedeem').addEventListener('click', async () => {
   const code = $('code').value.trim();
   if (!/^\d{6}$/.test(code)) {
@@ -182,7 +146,15 @@ function showReceipt(receipt) {
   $('resultCard').classList.remove('show');
   $('receiptStage').classList.add('show');
   $('actions').style.display = 'flex';
-  renderOverlay(receipt);
+  renderReceiptCanvas(receipt).then(canvas => {
+    const container = $('receipt');
+    container.innerHTML = '';
+    container.appendChild(canvas);
+    canvas.id = 'receiptCanvas';
+    canvas.style.width = '100%';
+    canvas.style.display = 'block';
+    canvas.style.borderRadius = '8px';
+  });
   init3DTilt();
 }
 
@@ -260,7 +232,7 @@ async function renderReceiptCanvas(receipt) {
   const month = date.getMonth() + 1;
   const day = date.getDate();
   const fee = Number(receipt.fee);
-  const s = String(fee).padStart(5, '0');
+  const feeStr = String(fee);
 
   ctx.fillText(receipt.name, W * 0.22, H * 0.11);
 
@@ -272,12 +244,14 @@ async function renderReceiptCanvas(receipt) {
   ctx.font = "26px 'ChenYuluoyan', 'PingFang TC', sans-serif";
   ctx.fillText(receipt.receiptItem, W * 0.09, H * 0.28);
   ctx.fillText('1', W * 0.35, H * 0.28);
-  ctx.fillText(String(fee), W * 0.445, H * 0.28);
-  ctx.fillText(String(fee), W * 0.57, H * 0.28);
+  ctx.fillText(feeStr, W * 0.445, H * 0.28);
+  ctx.fillText(feeStr, W * 0.57, H * 0.28);
 
+  // 合計金額右對齊：位數增加時整個往左擴展（萬/仟/佰/拾/元）
   const digitX = [0.315, 0.405, 0.495, 0.585, 0.675];
-  for (let i = 0; i < 5; i++) {
-    ctx.fillText(s[i], W * digitX[i], H * 0.815);
+  const startIdx = digitX.length - feeStr.length;
+  for (let i = 0; i < feeStr.length; i++) {
+    ctx.fillText(feeStr[i], W * digitX[startIdx + i], H * 0.815);
   }
 
   return canvas;
