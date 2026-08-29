@@ -52,9 +52,10 @@ function doPost(e) {
 
 // ============ 工具函數 ============
 function jsonResponse(payload, statusCode) {
-  return ContentService.createTextOutput(JSON.stringify(payload))
-    .setMimeType(ContentService.MimeType.JSON)
-    .setHttpCode(statusCode || 200);
+  const output = ContentService.createTextOutput(JSON.stringify(payload))
+    .setMimeType(ContentService.MimeType.JSON);
+  // GAS TextOutput 不支援 setHttpCode，狀態碼通過回傳 payload.status 表示
+  return output;
 }
 
 function getSheet(name) {
