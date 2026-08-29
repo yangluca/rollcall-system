@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>領取收據 · 師大影像藝術創作社</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f7f7f7; --fg:#0a0a0a; --muted:#6b6b6b; --line:#e8e8e8;
+    --ok:#1a7f37; --err:#cf222e; --blue:#2b4a9e;
+    --radius:16px; --shadow:0 4px 24px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0; font-family:'Space Grotesk','PingFang TC',sans-serif; background:var(--bg); color:var(--fg);}
+  .wrap{min-height:100%; max-width:420px; margin:0 auto; padding:24px 20px 40px; display:flex; flex-direction:column;}
+  header{margin-bottom:24px; text-align:center;}
+  h1{font-size:22px; font-weight:600; margin:0 0 6px;}
+  .subtitle{color:var(--muted); font-size:14px;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); margin-bottom:16px;}
+  label{display:block; font-size:13px; font-weight:500; margin-bottom:8px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+  input{width:100%; padding:14px 16px; font-size:20px; letter-spacing:.3em; text-align:center; border:1.5px solid var(--line); border-radius:12px; outline:none; font-family:inherit;}
+  input:focus{border-color:var(--fg);}
+  .btn{width:100%; padding:16px; font-size:17px; font-weight:600; border:none; border-radius:12px; background:var(--fg); color:#fff; cursor:pointer; margin-top:12px; transition:transform .1s, opacity .15s;}
+  .btn:active{transform:scale(.98);}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .receipt-stage{perspective:1200px; margin:20px 0; display:none;}
+  .receipt-stage.show{display:block;}
+  .receipt-wrap{width:100%; max-width:360px; margin:0 auto; transform-style:preserve-3d; transition:transform .1s; cursor:grab;}
+  .receipt-wrap:active{cursor:grabbing;}
+  .receipt{position:relative; width:100%; border-radius:8px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.18); background:#fff;}
+  .receipt img{width:100%; display:block;}
+  .overlay{position:absolute; inset:0; pointer-events:none;}
+  .ov{position:absolute; color:#2b4a9e; font-weight:400; line-height:1; white-space:nowrap; font-family:'ChenYuluoyan','PingFang TC',sans-serif;}
+  .ov.name{font-size:36px; letter-spacing:.08em;}
+  .ov.item{font-size:26px; letter-spacing:.04em;}
+  .ov.num{font-size:26px;}
+  .ov.date{font-size:22px; letter-spacing:.02em;}
+  .ov.total{font-size:26px;}
+  .actions{display:flex; gap:10px; margin-top:16px;}
+  .actions .btn{flex:1; margin-top:0;}
+  .result{display:none;}
+  .result.show{display:block;}
+  .status{display:flex; align-items:center; gap:10px; font-size:18px; font-weight:600; margin-bottom:12px;}
+  .status.ok{color:var(--ok);}
+  .status.err{color:var(--err);}
+  .detail{font-size:15px; color:var(--muted); line-height:1.6; text-align:center;}
+  .detail b{color:var(--fg);}
+  footer{margin-top:auto; padding-top:24px; text-align:center; font-size:12px; color:var(--muted);}
+  @font-face{font-family:'ChenYuluoyan'; src:url('ChenYuluoyan-2.0-Thin.ttf') format('truetype'); font-weight:400; font-display:swap;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>領取電子收據</h1>
+    <div class="subtitle">輸入幹部提供的 6 位密碼</div>
+  </header>
+
+  <div class="card" id="formCard">
+    <label for="code">6 位收據密碼</label>
+    <input type="tel" id="code" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}">
+    <button class="btn" id="btnRedeem">領取收據</button>
+  </div>
+
+  <div class="card result" id="resultCard">
+    <div id="resultContent"></div>
+  </div>
+
+  <div class="receipt-stage" id="receiptStage">
+    <div class="receipt-wrap idle" id="receiptWrap">
+      <div class="receipt" id="receipt">
+        <img src="receipt-scan.jpg" alt="收據" id="receiptImg">
+        <div class="overlay" id="overlay"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions" id="actions" style="display:none;">
+    <button class="btn secondary" id="btnDownload">下載圖片</button>
+    <button class="btn secondary" id="btnReset">領取下一张</button>
+  </div>
+
+  <footer>師大影像藝術創作社 · 點名繳費收據系統</footer>
+</div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbxjij3aFjDqrZ8J3pXQ3xj7qrT-75oqJjxjNnqgwjn_H28kjydQ3Oaxx6s1jl43fb-p/exec';
+const $ = id => document.getElementById(id);
+
+let currentReceipt = null;
+
+async function callAPI(action, payload) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...payload })
+  });
+  return res.json();
+}
+
+function formatMoney(n) {
+  return '$' + Number(n).toLocaleString('zh-TW');
+}
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function renderOverlay(receipt) {
+  const date = new Date(receipt.courseDate);
+  const rocYear = date.getFullYear() - 1911;
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const fee = Number(receipt.fee);
+
+  // 分解金額到 萬/仟/佰/拾/元
+  const s = String(fee).padStart(5, '0');
+  const digits = s.split(''); // [萬,仟,佰,拾,元]
+
+  $('overlay').innerHTML = `
+    <div class="ov name" style="left:22%; top:11%;">${receipt.name}</div>
+    <div class="ov date" style="left:68.5%; top:13%;">${rocYear}</div>
+    <div class="ov date" style="left:79%; top:13%;">${month}</div>
+    <div class="ov date" style="left:90%; top:13%;">${day}</div>
+    <div class="ov item" style="left:9%; top:28%;">${receipt.receiptItem}</div>
+    <div class="ov num" style="left:35%; top:28%;">1</div>
+    <div class="ov num" style="left:44.5%; top:28%;">${fee}</div>
+    <div class="ov num" style="left:57%; top:28%;">${fee}</div>
+    <div class="ov total" style="left:31.5%; top:81.5%;">${digits[0]}</div>
+    <div class="ov total" style="left:40.5%; top:81.5%;">${digits[1]}</div>
+    <div class="ov total" style="left:49.5%; top:81.5%;">${digits[2]}</div>
+    <div class="ov total" style="left:58.5%; top:81.5%;">${digits[3]}</div>
+    <div class="ov total" style="left:67.5%; top:81.5%;">${digits[4]}</div>
+  `;
+}
+
+$('btnRedeem').addEventListener('click', async () => {
+  const code = $('code').value.trim();
+  if (!/^\d{6}$/.test(code)) {
+    showResult('err', '請輸入 6 位數密碼');
+    return;
+  }
+
+  $('btnRedeem').disabled = true;
+  $('resultCard').classList.add('show');
+  $('resultContent').innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px 0;">查詢中...</div>';
+
+  try {
+    const data = await callAPI('redeem', { code });
+    if (data.status === 'error') {
+      showResult('err', data.message);
+      return;
+    }
+    currentReceipt = data.receipt;
+    showReceipt(currentReceipt);
+  } catch (err) {
+    showResult('err', '連線發生問題');
+  } finally {
+    $('btnRedeem').disabled = false;
+  }
+});
+
+function showReceipt(receipt) {
+  $('resultCard').classList.remove('show');
+  $('receiptStage').classList.add('show');
+  $('actions').style.display = 'flex';
+  renderOverlay(receipt);
+  init3DTilt();
+}
+
+function showResult(type, message) {
+  const icon = type === 'ok' ? '✓' : '✕';
+  $('resultCard').classList.add('show');
+  $('resultContent').innerHTML = `<div class="status ${type}"><span>${icon}</span>${message}</div>`;
+  $('receiptStage').classList.remove('show');
+  $('actions').style.display = 'none';
+}
+
+function init3DTilt() {
+  const wrap = $('receiptWrap');
+  let isDragging = false, startX, startY, rotX = 0, rotY = 0;
+
+  wrap.classList.remove('idle');
+
+  const onMove = (x, y) => {
+    const dx = x - startX;
+    const dy = y - startY;
+    rotY = Math.max(-25, Math.min(25, dx * 0.3));
+    rotX = Math.max(-25, Math.min(25, -dy * 0.3));
+    wrap.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+  };
+
+  wrap.addEventListener('mousedown', e => { isDragging = true; startX = e.clientX; startY = e.clientY; });
+  window.addEventListener('mousemove', e => { if (isDragging) onMove(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', () => { isDragging = false; });
+  wrap.addEventListener('touchstart', e => { isDragging = true; startX = e.touches[0].clientX; startY = e.touches[0].clientY; }, {passive:true});
+  window.addEventListener('touchmove', e => { if (isDragging) onMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive:true});
+  window.addEventListener('touchend', () => { isDragging = false; });
+}
+
+// 下載圖片：用 canvas 合成
+$('btnDownload').addEventListener('click', async () => {
+  if (!currentReceipt) return;
+  const canvas = await renderReceiptCanvas(currentReceipt);
+  const link = document.createElement('a');
+  link.download = `收據_${currentReceipt.name}_${currentReceipt.courseDate}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+$('btnReset').addEventListener('click', () => {
+  $('code').value = '';
+  $('receiptStage').classList.remove('show');
+  $('actions').style.display = 'none';
+  $('resultCard').classList.remove('show');
+  currentReceipt = null;
+});
+
+async function renderReceiptCanvas(receipt) {
+  const img = new Image();
+  img.src = 'receipt-scan.jpg';
+  await new Promise(r => img.onload = r);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+
+  // 載入字體
+  await document.fonts.load("36px 'ChenYuluoyan'");
+  await document.fonts.load("26px 'ChenYuluoyan'");
+  await document.fonts.load("22px 'ChenYuluoyan'");
+
+  ctx.fillStyle = '#2b4a9e';
+  ctx.font = "36px 'ChenYuluoyan', 'PingFang TC', sans-serif";
+  ctx.textBaseline = 'top';
+
+  const W = canvas.width, H = canvas.height;
+  const date = new Date(receipt.courseDate);
+  const rocYear = date.getFullYear() - 1911;
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const fee = Number(receipt.fee);
+  const s = String(fee).padStart(5, '0');
+
+  ctx.fillText(receipt.name, W * 0.22, H * 0.11);
+
+  ctx.font = "22px 'ChenYuluoyan', 'PingFang TC', sans-serif";
+  ctx.fillText(String(rocYear), W * 0.685, H * 0.13);
+  ctx.fillText(String(month), W * 0.79, H * 0.13);
+  ctx.fillText(String(day), W * 0.90, H * 0.13);
+
+  ctx.font = "26px 'ChenYuluoyan', 'PingFang TC', sans-serif";
+  ctx.fillText(receipt.receiptItem, W * 0.09, H * 0.28);
+  ctx.fillText('1', W * 0.35, H * 0.28);
+  ctx.fillText(String(fee), W * 0.445, H * 0.28);
+  ctx.fillText(String(fee), W * 0.57, H * 0.28);
+
+  const digitX = [0.315, 0.405, 0.495, 0.585, 0.675];
+  for (let i = 0; i < 5; i++) {
+    ctx.fillText(s[i], W * digitX[i], H * 0.815);
+  }
+
+  return canvas;
+}
+</script>
+</body>
+</html>

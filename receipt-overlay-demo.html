@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>收據文字定位 Demo</title>
+<style>
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:#fafafa; color:#0a0a0a;
+    font-family:-apple-system,'PingFang TC','Noto Sans TC',sans-serif;
+    padding:40px 20px;
+  }
+  .head{max-width:900px; margin:0 auto 28px; text-align:center;}
+  .head h1{font-size:24px; font-weight:600;}
+  .head p{font-size:13px; color:#a0a0a0; margin-top:8px;}
+
+  .wrap{max-width:900px; margin:0 auto;}
+
+  .sheet{position:relative; background:#fff; box-shadow:0 10px 30px rgba(0,0,0,.08); border-radius:6px; overflow:hidden;}
+  .sheet img{display:block; width:100%; height:auto;}
+  .overlay{position:absolute; inset:0; pointer-events:none;}
+
+  @font-face{font-family:'ChenYuluoyan'; src:url('ChenYuluoyan-2.0-Thin.ttf') format('truetype'); font-weight:400; font-display:swap;}
+  .ov{position:absolute; color:#111; font-weight:400; line-height:1; white-space:nowrap; font-family:'ChenYuluoyan','PingFang TC',sans-serif;}
+  .ov.name{font-size:clamp(14px,2.6vw,24px); letter-spacing:.08em;}
+  .ov.item{font-size:clamp(11px,1.9vw,17px); letter-spacing:.04em;}
+  .ov.num{font-size:clamp(11px,1.9vw,17px); }
+  .ov.date{font-size:clamp(10px,1.5vw,14px);  letter-spacing:.02em;}
+  .ov.total{font-size:clamp(11px,1.9vw,17px); }
+
+  .panel{max-width:900px; margin:24px auto 0; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;}
+  .panel label{display:block; font-size:11px; color:#a0a0a0; letter-spacing:.06em; text-transform:uppercase; margin-bottom:6px;}
+  .panel input{width:100%; height:40px; border:1px solid #e0e0e0; border-radius:6px; font-size:15px; padding:0 12px; font-family:inherit;}
+  .panel input:focus{outline:none; border-color:#0a0a0a;}
+</style>
+</head>
+<body>
+
+  <div class="head">
+    <h1>真實收據 · 動態文字定位</h1>
+    <p>文字直接印在「免用統一發票收據」掃描上，下方輸入可即時更新</p>
+  </div>
+
+  <div class="wrap">
+    <div class="sheet">
+      <img src="receipt-scan.jpg" alt="收據">
+      <div class="overlay">
+        <div class="ov name" id="o-name" style="left:53%; top:15.5%;">王小明</div>
+        <div class="ov date" id="o-year" style="left:71.5%; top:15%;">114</div>
+        <div class="ov date" id="o-month" style="left:82%; top:15%;">9</div>
+        <div class="ov date" id="o-day" style="left:93%; top:15%;">15</div>
+        <div class="ov item" id="o-item" style="left:6%; top:31%;">單堂社費（第 4 堂）</div>
+        <div class="ov num" id="o-qty" style="left:34%; top:31%;">1</div>
+        <div class="ov num" id="o-price" style="left:44.5%; top:31%;">150</div>
+        <div class="ov num" id="o-total" style="left:57%; top:31%;">150</div>
+        <div class="ov total" id="o-wan" style="left:27%; top:82.5%;">　</div>
+        <div class="ov total" id="o-qian" style="left:36%; top:82.5%;">　</div>
+        <div class="ov total" id="o-bai" style="left:45%; top:82.5%;">1</div>
+        <div class="ov total" id="o-shi" style="left:54%; top:82.5%;">5</div>
+        <div class="ov total" id="o-yuan" style="left:63%; top:82.5%;">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div><label>姓名 台照</label><input id="i-name" value="王小明" oninput="set('o-name',this.value)"></div>
+    <div><label>年（民國）</label><input id="i-year" value="114" oninput="set('o-year',this.value)"></div>
+    <div><label>月</label><input id="i-month" value="9" oninput="set('o-month',this.value)"></div>
+    <div><label>日</label><input id="i-day" value="15" oninput="set('o-day',this.value)"></div>
+    <div><label>品名</label><input id="i-item" value="單堂社費（第 4 堂）" oninput="set('o-item',this.value)"></div>
+    <div><label>數量</label><input id="i-qty" value="1" oninput="set('o-qty',this.value)"></div>
+    <div><label>單價</label><input id="i-price" value="150" oninput="set('o-price',this.value)"></div>
+    <div><label>總價</label><input id="i-total" value="150" oninput="set('o-total',this.value)"></div>
+  </div>
+
+<script>
+  function set(id, val){ document.getElementById(id).textContent = val; }
+</script>
+</body>
+</html>

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>點名系統 · 設計方向</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#fafafa; --surface:#f5f5f5; --ink:#0a0a0a; --dim:#a0a0a0;
+    --muted:#c0c0c0; --border:#e8e8e8; --border2:#e0e0e0; --ok:#0a7d3c;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'Space Grotesk', -apple-system, 'PingFang TC', 'Noto Sans TC', sans-serif;
+    -webkit-font-smoothing:antialiased; padding:48px 40px 80px;
+  }
+  /* ——— 展示板 header ——— */
+  .board-head{max-width:1200px; margin:0 auto 40px;}
+  .board-head .kicker{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); margin-bottom:12px;}
+  .board-head h1{font-size:32px; font-weight:600; letter-spacing:-.01em; line-height:1.1;}
+  .board-head p{font-size:14px; color:var(--dim); margin-top:12px; max-width:620px; line-height:1.6;}
+  .board-head .rule{margin-top:28px; border-top:1px solid var(--border);}
+
+  .section{margin-top:56px;}
+  .section-label{font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin-bottom:8px;}
+  .section-title{font-size:20px; font-weight:600; margin-bottom:24px;}
+
+  /* ——— 手機 frame 網格 ——— */
+  .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(340px,1fr)); gap:40px; max-width:1200px; margin:0 auto;}
+  .screen{display:flex; flex-direction:column; gap:12px;}
+  .screen .cap{font-size:11px; color:var(--dim); letter-spacing:.04em; padding-left:4px;}
+  .screen .cap b{color:var(--ink); font-weight:500;}
+
+  .phone{
+    width:340px; background:#fff; border:1px solid var(--border); border-radius:28px;
+    overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.03), 0 10px 30px rgba(0,0,0,.06);
+    position:relative;
+  }
+  .notch{height:24px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid var(--border);}
+  .notch .bar{width:84px; height:14px; background:var(--ink); border-radius:7px; opacity:.9;}
+  .pscreen{padding:22px 20px 28px; min-height:560px; display:flex; flex-direction:column;}
+
+  /* ——— 共用組件 ——— */
+  .brand{font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted);}
+  .stitle{font-size:24px; font-weight:600; letter-spacing:-.01em; margin-top:6px; line-height:1.15;}
+  .subtitle{font-size:13px; color:var(--dim); margin-top:6px; line-height:1.5;}
+
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-top:20px;}
+  .card .row{display:flex; justify-content:space-between; align-items:baseline; font-size:13px; color:var(--dim); padding:4px 0;}
+  .card .row b{color:var(--ink); font-weight:500;}
+
+  .field{margin-top:18px;}
+  .field label{display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-bottom:8px;}
+  .field input{
+    width:100%; height:52px; border:1px solid var(--border2); border-radius:8px;
+    font-family:inherit; font-size:17px; color:var(--ink); padding:0 14px; background:#fff;
+  }
+  .field input:focus{outline:none; border-color:var(--ink);}
+  .field input::placeholder{color:var(--muted);}
+
+  .btn{
+    width:100%; height:54px; border:none; border-radius:8px; background:var(--ink); color:#fff;
+    font-family:inherit; font-size:13px; letter-spacing:.12em; text-transform:uppercase; font-weight:500;
+    cursor:pointer; margin-top:auto; transition:transform .12s cubic-bezier(.16,1,.3,1);
+  }
+  .btn:active{transform:scale(.98);}
+  .btn.ghost{background:#fff; color:var(--ink); border:1px solid var(--border2);}
+
+  .hint{font-size:12px; color:var(--muted); text-align:center; margin-top:14px; line-height:1.5;}
+
+  .tag{display:inline-block; font-size:11px; letter-spacing:.06em; padding:5px 10px; border-radius:6px; border:1px solid var(--border2); color:var(--dim);}
+
+  .amount-label{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin-top:26px;}
+  .amount{font-size:48px; font-weight:600; letter-spacing:-.02em; margin-top:4px; line-height:1;}
+  .amount small{font-size:22px; font-weight:400; color:var(--dim);}
+
+  /* 收據 */
+  .receipt{border:1px solid var(--border); border-radius:10px; margin-top:20px; overflow:hidden;}
+  .receipt .r-head{border-bottom:1px solid var(--border); padding:16px; text-align:center;}
+  .receipt .r-head .org{font-size:14px; font-weight:600;}
+  .receipt .r-head .sub{font-size:11px; color:var(--dim); margin-top:3px; letter-spacing:.2em;}
+  .receipt .r-body{padding:14px 16px; font-size:13px;}
+  .receipt .r-body .row{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px dashed var(--border);}
+  .receipt .r-body .row:last-child{border-bottom:none;}
+  .receipt .r-body .row span{color:var(--dim);}
+  .receipt .r-body .row b{font-weight:500;}
+  .receipt .r-foot{padding:14px 16px; font-size:12px; color:var(--dim); border-top:1px solid var(--border);}
+
+  /* code 大字 */
+  .code-box{margin-top:26px; text-align:center;}
+  .code-box .clabel{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim);}
+  .code-box .cval{font-size:56px; font-weight:700; letter-spacing:.22em; margin-top:8px; font-variant-numeric:tabular-nums;}
+
+  /* 名單 */
+  .list{margin-top:16px; display:flex; flex-direction:column; gap:8px;}
+  .list-item{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border:1px solid var(--border); border-radius:8px; font-size:14px;}
+  .list-item .meta{font-size:11px; color:var(--dim);}
+  .pill{font-size:10px; letter-spacing:.06em; padding:4px 8px; border-radius:6px;}
+  .pill.due{background:var(--ink); color:#fff;}
+  .pill.done{background:var(--surface); color:var(--dim);}
+
+  .seg{margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .seg button{height:44px; border:1px solid var(--border2); border-radius:8px; background:#fff; font-family:inherit; font-size:13px; color:var(--dim); cursor:pointer;}
+  .seg button.on{background:var(--ink); color:#fff; border-color:var(--ink);}
+
+  .toprow{display:flex; justify-content:space-between; align-items:center; margin-top:14px;}
+  .toprow .lbl{font-size:13px; color:var(--dim);}
+  .toprow .pill-switch{font-size:12px; padding:6px 12px; border:1px solid var(--border2); border-radius:6px; color:var(--ink);}
+</style>
+</head>
+<body>
+
+  <div class="board-head">
+    <div class="kicker">Roll-call System · Design Direction</div>
+    <h1>點名繳費收據系統 · 手機優先設計方向</h1>
+    <p>來訪社員一律用手機掃碼點名，因此全站以 mobile-first 設計。以下每一格都是一個手機畫面（340px），展示完整流程：社員簽到 → 繳費 → 領收據；幹部定位 → 收款 → 給 code。白極簡 BDFM 風格：純白、黑字、單一無襯線字體、零裝飾。</p>
+    <div class="rule"></div>
+  </div>
+
+  <!-- ══════════ 社員端 ══════════ -->
+  <div class="section">
+    <div class="section-label">Member Flow</div>
+    <div class="section-title">社員端 · 簽到與收據</div>
+  </div>
+  <div class="grid">
+
+    <!-- 1 簽到 -->
+    <div class="screen">
+      <div class="cap"><b>01</b> 簽到 Check-in</div>
+      <div class="phone"><div class="notch"><div class="bar"></div></div><div class="pscreen">
+        <div class="brand">NTNU Visual Arts Society</div>
+        <div class="stitle">點名簽到<br><span style="font-size:13px;color:var(--dim);font-weight:400;">Check-in</span></div>
+        <div class="card">
+          <div class="row"><span>堂次 Session</span><b>第 4 堂</b></div>
+          <div class="row"><span>日期 Date</span><b>9 月 15 日 週三</b></div>
+          <div class="row"><span>時間 Time</span><b>19:00</b></div>
+        </div>
+        <div class="field"><label>姓名 Name</label><input placeholder="王小明"></div>
+        <div class="field"><label>電話末四碼 Last 4 digits</label><input placeholder="0000" inputmode="numeric"></div>
+        <button class="btn">簽到 Check-in</button>
+      </div></div>
+    </div>
+
+    <!-- 2 簽到結果 -->
+    <div class="screen">
+      <div class="cap"><b>02</b> 簽到結果 Checked-in</div>
+      <div class="phone"><div class="notch"><div class="bar"></div></div><div class="pscreen">
+        <div class="brand">NTNU Visual Arts Society</div>
+        <div class="stitle">王小明</div>
+        <div class="tag" style="margin-top:10px;">單堂社員 Single-session</div>
+        <div class="amount-label">本堂應繳 Due</div>
+        <div class="amount"><small>NT$</small> 150</div>
+        <div class="hint">請至幹部處繳費，完成後幹部會提供一組 6 位代碼，於此頁領取電子收據。</div>
+        <button class="btn">確認簽到 Confirm</button>
+      </div></div>
+    </div>
+
+    <!-- 3 領收據 -->
+    <div class="screen">
+      <div class="cap"><b>03</b> 領取收據 Redeem</div>
+      <div class="phone"><div class="notch"><div class="bar"></div></div><div class="pscreen">
+        <div class="brand">NTNU Visual Arts Society</div>
+        <div class="stitle">領取收據<br><span style="font-size:13px;color:var(--dim);font-weight:400;">Receipt</span></div>
+        <div class="subtitle">輸入幹部提供的 6 位代碼，即可取得你的電子收據。</div>
+        <div class="field"><label>代碼 Code</label><input placeholder="000000" inputmode="numeric" style="letter-spacing:.3em;font-size:20px;"></div>
+        <button class="btn">領取 Redeem</button>
+      </div></div>
+    </div>
+
+    <!-- 4 收據 -->
+    <div class="screen">
+      <div class="cap"><b>04</b> 電子收據 Receipt</div>
+      <div class="phone"><div class="notch"><div class="bar"></div></div><div class="pscreen">
+        <div class="brand">NTNU Visual Arts Society</div>
+        <div class="stitle">電子收據<br><span style="font-size:13px;color:var(--dim);font-weight:400;">E-Receipt</span></div>
+        <div class="receipt">
+          <div class="r-head"><div class="org">師大影像藝術創作社</div><div class="sub">RECEIPT</div></div>
+          <div class="r-body">
+            <div class="row"><span>收據編號 No.</span><b>R-04-007</b></div>
+            <div class="row"><span>姓名 Name</span><b>王小明</b></div>
+            <div class="row"><span>項目 Item</span><b>單堂社費（第 4 堂）</b></div>
+            <div class="row"><span>金額 Amount</span><b>NT$ 150</b></div>
+            <div class="row"><span>日期 Date</span><b>2025/09/15</b></div>
+            <div class="row"><span>方式 Method</span><b>現金 Cash</b></div>
+          </div>
+          <div class="r-foot">經辦人簽章 Signature ______________</div>
+        </div>
+        <button class="btn">保存收據 Save</button>
+      </div></div>
+    </div>
+
+  </div>
+
+  <!-- ══════════ 幹部端 ══════════ -->
+  <div class="section">
+    <div class="section-label">Staff Flow</div>
+    <div class="section-title">幹部端 · 定位收款與發放代碼</div>
+  </div>
+  <div class="grid">
+
+    <!-- 5 登入 -->
+    <div class="screen">
+      <div class="cap"><b>05</b> 幹部登入 Staff Login</div>
+      <div class="phone"><div class="notch"><div class="bar"></div></div><div class="pscreen">
+        <div class="brand">NTNU Visual Arts Society</div>
+        <div class="stitle">幹部後台<br><span style="font-size:13px;color:var(--dim);font-weight:400;">Staff</span></div>
+        <div class="field"><label>密碼 Password</label><input type="password" placeholder="••••••"></div>
+        <button class="btn">登入 Login</button>
+      </div></div>
+    </div>
+
+    <!-- 6 主畫面 -->
+    <div class="screen">
+      <div class="cap"><b>06</b> 幹部主畫面 Dashboard</div>
+      <div class="phone"><div class="notch"><div class="bar"></div></div><div class="pscreen">
+        <div class="brand">NTNU Visual Arts Society</div>
+        <div class="toprow"><span class="lbl">目前堂次 Current</span><span class="pill-switch">第 4 堂 ▾</span></div>
+        <div class="stitle" style="font-size:20px;">待繳費名單</div>
+        <div class="list">
+          <div class="list-item"><div>王小明<span class="meta" style="display:block;">末四碼 1234</span></div><span class="pill due">未繳</span></div>
+          <div class="list-item"><div>陳小華<span class="meta" style="display:block;">末四碼 5678</span></div><span class="pill due">未繳</span></div>
+          <div class="list-item"><div>林小芳<span class="meta" style="display:block;">末四碼 9012</span></div><span class="pill done">已繳</span></div>
+        </div>
+        <div class="field"><label>快速定位 · 電話末四碼 Last 4</label><input placeholder="1234" inputmode="numeric"></div>
+        <button class="btn">定位 Locate</button>
+      </div></div>
+    </div>
+
+    <!-- 7 確認收款 -->
+    <div class="screen">
+      <div class="cap"><b>07</b> 確認收款 Confirm</div>
+      <div class="phone"><div class="notch"><div class="bar"></div></div><div class="pscreen">
+        <div class="brand">NTNU Visual Arts Society</div>
+        <div class="stitle">王小明</div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <span class="tag">單堂社員</span><span class="tag">末四碼 1234</span>
+        </div>
+        <div class="amount-label">應收金額 Amount</div>
+        <div class="amount"><small>NT$</small> 150</div>
+        <div class="seg">
+          <button class="on">現金 Cash</button>
+          <button>轉帳 Transfer</button>
+        </div>
+        <button class="btn" style="margin-top:24px;">確認收款 Confirm</button>
+      </div></div>
+    </div>
+
+    <!-- 8 收款完成 -->
+    <div class="screen">
+      <div class="cap"><b>08</b> 已收款 · 代碼 Paid</div>
+      <div class="phone"><div class="notch"><div class="bar"></div></div><div class="pscreen">
+        <div class="brand">NTNU Visual Arts Society</div>
+        <div class="stitle" style="text-align:center;">已收款 Paid</div>
+        <div class="code-box">
+          <div class="clabel">領取代碼 Code</div>
+          <div class="cval">482917</div>
+        </div>
+        <div class="receipt" style="margin-top:20px;">
+          <div class="r-body">
+            <div class="row"><span>收據編號</span><b>R-04-007</b></div>
+            <div class="row"><span>姓名</span><b>王小明</b></div>
+            <div class="row"><span>金額</span><b>NT$ 150</b></div>
+          </div>
+        </div>
+        <div class="hint">口頭報此代碼給社員，社員於簽到頁輸入即可領取電子收據。</div>
+        <button class="btn">完成 Done</button>
+      </div></div>
+    </div>
+
+  </div>
+
+</body>
+</html>

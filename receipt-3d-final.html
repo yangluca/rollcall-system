@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D 真實收據</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#fafafa; --ink:#0a0a0a; --dim:#a0a0a0; --muted:#c0c0c0; --border:#e8e8e8;}
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'Space Grotesk', -apple-system, 'PingFang TC', 'Noto Sans TC', sans-serif;
+    -webkit-font-smoothing:antialiased; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:40px 20px; overflow:hidden;
+  }
+  .head{text-align:center; margin-bottom:24px;}
+  .head .kicker{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim);}
+  .head h1{font-size:26px; font-weight:600; margin-top:8px;}
+  .head p{font-size:13px; color:var(--dim); margin-top:8px;}
+
+  .scene{perspective:1400px; margin:10px 0 36px;}
+  .receipt{
+    width:640px; max-width:92vw; position:relative;
+    transform-style:preserve-3d;
+    transform:rotateX(6deg) rotateY(-16deg);
+    transition:transform .15s ease-out; cursor:grab;
+  }
+  .receipt.grabbing{cursor:grabbing; transition:none;}
+  .receipt img{display:block; width:100%; height:auto; border-radius:4px;
+    box-shadow:0 1px 0 rgba(255,255,255,.6) inset,
+      0 40px 80px -20px rgba(0,0,0,.35), 0 16px 32px -14px rgba(0,0,0,.2);}
+
+  .overlay{position:absolute; inset:0; pointer-events:none;}
+  @font-face{font-family:'ChenYuluoyan'; src:url('ChenYuluoyan-2.0-Thin.ttf') format('truetype'); font-weight:400; font-display:swap;}
+  .ov{position:absolute; color:#2b4a9e; font-weight:400; line-height:1; white-space:nowrap; font-family:'ChenYuluoyan','PingFang TC',sans-serif;}
+  .ov.name{font-size:36px; letter-spacing:.08em;}
+  .ov.item{font-size:26px; letter-spacing:.04em;}
+  .ov.num{font-size:26px;}
+  .ov.date{font-size:22px; letter-spacing:.02em;}
+  .ov.total{font-size:26px;}
+
+  .hint{margin-top:6px; font-size:12px; color:var(--muted); text-align:center;}
+  .hint b{color:var(--dim); font-weight:500;}
+
+  @media (prefers-reduced-motion: no-preference){
+    .receipt.idle{animation:float 8s ease-in-out infinite;}
+    @keyframes float{0%,100%{transform:rotateX(6deg) rotateY(-16deg);}50%{transform:rotateX(2deg) rotateY(-28deg);}}
+  }
+</style>
+</head>
+<body>
+
+  <div class="head">
+    <div class="kicker">E-Receipt · 3D</div>
+    <h1>3D 電子收據</h1>
+    <p>真實收據掃描 + 手寫文字 + 拖曳旋轉</p>
+  </div>
+
+  <div class="scene">
+    <div class="receipt idle" id="receipt">
+      <img src="receipt-scan.jpg" alt="收據">
+      <div class="overlay">
+        <div class="ov name" style="left:22%; top:11%;">王小明</div>
+        <div class="ov date" style="left:68.5%; top:13%;">114</div>
+        <div class="ov date" style="left:79%; top:13%;">9</div>
+        <div class="ov date" style="left:90%; top:13%;">15</div>
+        <div class="ov item" style="left:9%; top:28%;">單堂社課</div>
+        <div class="ov num" style="left:35%; top:28%;">1</div>
+        <div class="ov num" style="left:44.5%; top:28%;">150</div>
+        <div class="ov num" style="left:57%; top:28%;">150</div>
+        <div class="ov total" style="left:42%; top:81.5%;">1</div>
+        <div class="ov total" style="left:51%; top:81.5%;">5</div>
+        <div class="ov total" style="left:60%; top:81.5%;">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint">✦ <b>拖曳</b>可旋轉視角 · 欄位值為動態填入</div>
+
+<script>
+  const receipt = document.getElementById('receipt');
+  let rx = 6, ry = -16, dragging = false, px = 0, py = 0;
+  receipt.addEventListener('pointerdown', e => {
+    dragging = true; px = e.clientX; py = e.clientY;
+    receipt.classList.add('grabbing'); receipt.classList.remove('idle');
+    receipt.setPointerCapture(e.pointerId);
+  });
+  receipt.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    ry += (e.clientX - px) * 0.4;
+    rx -= (e.clientY - py) * 0.3;
+    rx = Math.max(-55, Math.min(55, rx));
+    px = e.clientX; py = e.clientY;
+    receipt.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+  });
+  const stop = () => { dragging = false; receipt.classList.remove('grabbing'); };
+  receipt.addEventListener('pointerup', stop);
+  receipt.addEventListener('pointercancel', stop);
+</script>
+
+</body>
+</html>

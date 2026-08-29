@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>幹部收款 · 師大影像藝術創作社</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#fff; --fg:#0a0a0a; --muted:#6b6b6b; --line:#e8e8e8;
+    --ok:#1a7f37; --warn:#9a6700; --err:#cf222e; --blue:#2b4a9e;
+    --radius:16px; --shadow:0 4px 24px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0; font-family:'Space Grotesk','PingFang TC',sans-serif; background:var(--bg); color:var(--fg);}
+  .wrap{min-height:100%; max-width:420px; margin:0 auto; padding:24px 20px 40px; display:flex; flex-direction:column;}
+  header{margin-bottom:24px;}
+  h1{font-size:22px; font-weight:600; margin:0 0 6px; letter-spacing:-.02em;}
+  .subtitle{color:var(--muted); font-size:14px;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); margin-bottom:16px;}
+  label{display:block; font-size:13px; font-weight:500; margin-bottom:8px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+  input,select{width:100%; padding:14px 16px; font-size:17px; border:1.5px solid var(--line); border-radius:12px; outline:none; font-family:inherit; background:#fff;}
+  input:focus,select:focus{border-color:var(--fg);}
+  .btn{width:100%; padding:16px; font-size:17px; font-weight:600; border:none; border-radius:12px; background:var(--fg); color:#fff; cursor:pointer; margin-top:12px; transition:transform .1s, opacity .15s;}
+  .btn:active{transform:scale(.98);}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .btn.secondary{background:#fff; color:var(--fg); border:1.5px solid var(--line);}
+  .result{display:none;}
+  .result.show{display:block;}
+  .status{display:flex; align-items:center; gap:10px; font-size:18px; font-weight:600; margin-bottom:12px;}
+  .status.ok{color:var(--ok);}
+  .status.err{color:var(--err);}
+  .detail{font-size:15px; color:var(--muted); line-height:1.6;}
+  .detail b{color:var(--fg);}
+  .fee-box{background:#fafafa; border-radius:12px; padding:16px; margin:16px 0; text-align:center;}
+  .fee-box .amount{font-size:36px; font-weight:600; color:var(--fg);}
+  .code-box{background:#f0f7ff; border:2px solid var(--blue); border-radius:12px; padding:20px; text-align:center; margin:16px 0;}
+  .code-box .code{font-size:42px; font-weight:600; color:var(--blue); letter-spacing:.2em;}
+  .code-box .hint{font-size:13px; color:var(--muted); margin-top:8px;}
+  .loading{text-align:center; color:var(--muted); padding:40px 0;}
+  .spinner{width:28px; height:28px; border:2px solid var(--line); border-top-color:var(--fg); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 12px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  footer{margin-top:auto; padding-top:24px; text-align:center; font-size:12px; color:var(--muted);}
+  .mode-tabs{display:flex; gap:8px; margin-bottom:16px;}
+  .mode-tab{flex:1; padding:12px; text-align:center; font-size:14px; font-weight:500; border-radius:10px; cursor:pointer; background:#fafafa; color:var(--muted); border:1px solid var(--line);}
+  .mode-tab.active{background:var(--fg); color:#fff; border-color:var(--fg);}
+  .section{display:none;}
+  .section.active{display:block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>幹部收款後台</h1>
+    <div class="subtitle">輸入末四碼定位社員，確認收款後產生領取密碼。</div>
+  </header>
+
+  <div class="card">
+    <label for="staffPassword">幹部密碼</label>
+    <input type="password" id="staffPassword" placeholder="0000" maxlength="10" inputmode="numeric">
+
+    <div class="mode-tabs" style="margin-top:16px;">
+      <div class="mode-tab active" data-mode="locate">定位收款</div>
+      <div class="mode-tab" data-mode="manual">手動代簽</div>
+    </div>
+
+    <div class="section active" id="locateSection">
+      <label for="last4">社員電話末四碼</label>
+      <input type="tel" id="last4" placeholder="0000" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
+      <button class="btn" id="btnLocate">定位社員</button>
+    </div>
+
+    <div class="section" id="manualSection">
+      <label for="mName">姓名</label>
+      <input type="text" id="mName" placeholder="社員姓名">
+      <label for="mLast4" style="margin-top:12px;">電話末四碼</label>
+      <input type="tel" id="mLast4" placeholder="0000" maxlength="4" inputmode="numeric">
+      <label for="mIdentity" style="margin-top:12px;">身份</label>
+      <select id="mIdentity">
+        <option value="student">學生</option>
+        <option value="public">社會人士</option>
+      </select>
+      <label for="mMemberType" style="margin-top:12px;">會員類型</label>
+      <select id="mMemberType">
+        <option value="single">單堂社員</option>
+        <option value="semester">學期社員</option>
+      </select>
+      <button class="btn" id="btnManual">代簽到</button>
+    </div>
+  </div>
+
+  <div class="card result" id="resultCard">
+    <div id="resultContent"></div>
+  </div>
+
+  <footer>師大影像藝術創作社 · 點名繳費收據系統</footer>
+</div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbxjij3aFjDqrZ8J3pXQ3xj7qrT-75oqJjxjNnqgwjn_H28kjydQ3Oaxx6s1jl43fb-p/exec';
+const $ = id => document.getElementById(id);
+
+function formatMoney(n) {
+  return '$' + Number(n).toLocaleString('zh-TW');
+}
+
+async function callAPI(action, payload) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...payload })
+  });
+  return res.json();
+}
+
+// 模式切換
+document.querySelectorAll('.mode-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    $(tab.dataset.mode + 'Section').classList.add('active');
+  });
+});
+
+// 定位社員
+$('btnLocate').addEventListener('click', async () => {
+  const staffPassword = $('staffPassword').value.trim();
+  const last4 = $('last4').value.trim();
+
+  if (!staffPassword || !/^\d{4}$/.test(last4)) {
+    showResult('err', '請輸入幹部密碼與社員末四碼');
+    return;
+  }
+
+  $('btnLocate').disabled = true;
+  $('resultCard').classList.add('show');
+  $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>查詢中...</div>';
+
+  try {
+    const data = await callAPI('locate', { staffPassword, last4 });
+    renderLocateResult(data, staffPassword, last4);
+  } catch (err) {
+    showResult('err', '連線發生問題');
+  } finally {
+    $('btnLocate').disabled = false;
+  }
+});
+
+function renderLocateResult(data, staffPassword, last4) {
+  if (data.status === 'error') {
+    showResult('err', data.message);
+    return;
+  }
+
+  const m = data.member;
+  const fee = data.fee;
+
+  let html = `
+    <div class="status ok"><span>✓</span>已定位社員</div>
+    <div class="detail">
+      <b>${m.name}</b>（${m.identity === 'student' ? '學生' : '社會人士'}）<br>
+      會員類型：${m.memberType === 'semester' ? '學期社員' : '單堂社員'}<br>
+      課程：${data.course.name}<br>
+      品名：${data.receiptItem}
+    </div>
+    <div class="fee-box">
+      <div class="amount">${formatMoney(fee)}</div>
+      <div class="unit">應繳金額</div>
+    </div>
+  `;
+
+  if (fee > 0) {
+    html += `<button class="btn" id="btnConfirm">確認已收現金 ${formatMoney(fee)}</button>`;
+  } else {
+    html += `<div class="detail" style="text-align:center;">本堂無需繳費，可直接完成簽到。</div>`;
+  }
+
+  $('resultContent').innerHTML = html;
+
+  if ($('btnConfirm')) {
+    $('btnConfirm').addEventListener('click', async () => {
+      $('btnConfirm').disabled = true;
+      $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>產生密碼中...</div>';
+      try {
+        const confirmData = await callAPI('confirm', { staffPassword, last4 });
+        renderConfirmResult(confirmData);
+      } catch (err) {
+        showResult('err', '連線發生問題');
+      }
+    });
+  }
+}
+
+function renderConfirmResult(data) {
+  if (data.status === 'error') {
+    showResult('err', data.message);
+    return;
+  }
+
+  $('resultContent').innerHTML = `
+    <div class="status ok"><span>✓</span>收款完成</div>
+    <div class="detail" style="text-align:center;">
+      <b>${data.memberName}</b> 已繳交 ${formatMoney(data.fee)}<br>
+      品名：${data.receiptItem}
+    </div>
+    <div class="code-box">
+      <div class="code">${data.code}</div>
+      <div class="hint">請口頭告知社員此 6 位密碼</div>
+    </div>
+    <button class="btn secondary" onclick="resetAll()">下一筆</button>
+  `;
+}
+
+// 手動代簽
+$('btnManual').addEventListener('click', async () => {
+  const staffPassword = $('staffPassword').value.trim();
+  const name = $('mName').value.trim();
+  const last4 = $('mLast4').value.trim();
+  const identity = $('mIdentity').value;
+  const memberType = $('mMemberType').value;
+
+  if (!staffPassword || !name || !/^\d{4}$/.test(last4)) {
+    showResult('err', '請輸入完整資料');
+    return;
+  }
+
+  $('btnManual').disabled = true;
+  $('resultCard').classList.add('show');
+  $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>處理中...</div>';
+
+  try {
+    const data = await callAPI('manualCheckin', { staffPassword, name, phone: '0000' + last4, identity, memberType });
+    if (data.needPayment) {
+      // 需要繳費，轉到定位收款流程
+      renderLocateResult({
+        status: 'ok',
+        member: { name, identity, memberType, phoneLast4: last4 },
+        course: data.course,
+        fee: data.fee,
+        receiptItem: data.receiptItem
+      }, staffPassword, last4);
+    } else {
+      showResult('ok', `${name} 代簽到成功，本堂無需繳費。`);
+    }
+  } catch (err) {
+    showResult('err', '連線發生問題');
+  } finally {
+    $('btnManual').disabled = false;
+  }
+});
+
+function showResult(type, message) {
+  const icon = type === 'ok' ? '✓' : '✕';
+  $('resultCard').classList.add('show');
+  $('resultContent').innerHTML = `<div class="status ${type}"><span>${icon}</span>${message}</div>`;
+}
+
+function resetAll() {
+  $('last4').value = '';
+  $('resultCard').classList.remove('show');
+  $('resultContent').innerHTML = '';
+}
+</script>
+</body>
+</html>
