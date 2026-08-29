@@ -264,7 +264,29 @@ async function renderReceiptCanvas(receipt) {
     ctx.fillText(cnDigit[parseInt(feeStr[i])], W * shiftedDigitX[startIdx + i], H * 0.815);
   }
 
+  // 社團章：傾斜 20% 蓋在收據專用章下方空格
+  await drawStamp(ctx, W * 0.62, H * 0.64, Math.min(W, H) * 0.28);
+
   return canvas;
+}
+
+async function drawStamp(ctx, x, y, size) {
+  return new Promise((resolve) => {
+    const stamp = new Image();
+    stamp.src = 'stamp.png';
+    stamp.onload = () => {
+      const aspect = stamp.naturalWidth / stamp.naturalHeight;
+      const w = size;
+      const h = w / aspect;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-20 * Math.PI / 180);
+      ctx.drawImage(stamp, -w / 2, -h / 2, w, h);
+      ctx.restore();
+      resolve();
+    };
+    stamp.onerror = () => resolve();
+  });
 }
 </script>
 </body>
