@@ -109,7 +109,7 @@ function formatMoney(n) {
 async function callAPI(action, payload) {
   const res = await fetch(API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({ action, ...payload })
   });
   return res.json();
