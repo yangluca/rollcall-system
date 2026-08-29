@@ -30,6 +30,11 @@
   .receipt-stage.show{display:block;}
   .receipt-wrap{width:100%; max-width:360px; margin:0 auto; transform-style:preserve-3d; transition:transform .1s; cursor:grab;}
   .receipt-wrap:active{cursor:grabbing;}
+  .receipt-wrap.idle{animation:idleSpin 8s ease-in-out infinite;}
+  @keyframes idleSpin{
+    0%,100%{transform:rotateX(4deg) rotateY(-10deg);}
+    50%{transform:rotateX(-2deg) rotateY(10deg);}
+  }
   .receipt{position:relative; width:100%; border-radius:8px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.18); background:#fff;}
   .receipt canvas{width:100%; display:block; border-radius:8px;}
   .actions{display:flex; gap:10px; margin-top:16px;}
@@ -168,24 +173,30 @@ function showResult(type, message) {
 
 function init3DTilt() {
   const wrap = $('receiptWrap');
-  let isDragging = false, startX, startY, rotX = 0, rotY = 0;
+  let isDragging = false, startX, startY, rotX = 4, rotY = -10;
 
   wrap.classList.remove('idle');
 
   const onMove = (x, y) => {
     const dx = x - startX;
     const dy = y - startY;
-    rotY = Math.max(-25, Math.min(25, dx * 0.3));
-    rotX = Math.max(-25, Math.min(25, -dy * 0.3));
+    rotY = Math.max(-25, Math.min(25, -10 + dx * 0.3));
+    rotX = Math.max(-25, Math.min(25, 4 - dy * 0.3));
     wrap.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
   };
 
-  wrap.addEventListener('mousedown', e => { isDragging = true; startX = e.clientX; startY = e.clientY; });
+  const endDrag = () => {
+    isDragging = false;
+    wrap.classList.add('idle');
+    wrap.style.transform = '';
+  };
+
+  wrap.addEventListener('mousedown', e => { isDragging = true; wrap.classList.remove('idle'); startX = e.clientX; startY = e.clientY; });
   window.addEventListener('mousemove', e => { if (isDragging) onMove(e.clientX, e.clientY); });
-  window.addEventListener('mouseup', () => { isDragging = false; });
-  wrap.addEventListener('touchstart', e => { isDragging = true; startX = e.touches[0].clientX; startY = e.touches[0].clientY; }, {passive:true});
+  window.addEventListener('mouseup', endDrag);
+  wrap.addEventListener('touchstart', e => { isDragging = true; wrap.classList.remove('idle'); startX = e.touches[0].clientX; startY = e.touches[0].clientY; }, {passive:true});
   window.addEventListener('touchmove', e => { if (isDragging) onMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive:true});
-  window.addEventListener('touchend', () => { isDragging = false; });
+  window.addEventListener('touchend', endDrag);
 }
 
 // 下載圖片：用 canvas 合成
