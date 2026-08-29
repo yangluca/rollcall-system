@@ -255,8 +255,8 @@ async function renderReceiptCanvas(receipt) {
   ctx.fillText(feeStr, W * 0.445, H * 0.28);
   ctx.fillText(feeStr, W * 0.57, H * 0.28);
 
-  // 合計金額：個位數在十位數處、十位數在百位數號，整組從之前的位置往左移 2%
-  const shiftedDigitX = [0.255, 0.345, 0.435, 0.525, 0.615];
+  // 合計金額：個位數在十位數處、十位數在百位數號，整組從之前的位置往左移 1%
+  const shiftedDigitX = [0.245, 0.335, 0.425, 0.515, 0.605];
   const startIdx = shiftedDigitX.length - feeStr.length;
   const cnDigit = ['零','壹','貳','參','肆','伍','陸','柒','捌','玖'];
   ctx.font = "30px 'ChenYuluoyan', 'PingFang TC', sans-serif";
