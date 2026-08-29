@@ -186,13 +186,13 @@ function renderResult(data) {
     $('resultContent').innerHTML = `
       <div class="status pay"><span>$</span>需要繳費</div>
       <div class="detail">
-        <b>${memberName}</b>請到櫃檯繳交現金，幹部確認後會提供領收據密碼。
+        <b>${memberName}</b>請到櫃檯繳交現金，幹部確認後會提供 6 位領收據密碼。
       </div>
       <div class="fee-box">
         <div class="amount">${formatMoney(data.fee)}</div>
         <div class="unit">${data.receiptItem}</div>
       </div>
-      <button class="btn secondary" onclick="location.reload()">我已取得密碼，刷新</button>
+      <a href="receipt.html" class="btn secondary">前往領收據 →</a>
     `;
   }
 }
