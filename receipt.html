@@ -218,12 +218,11 @@ async function renderReceiptCanvas(receipt) {
   ctx.drawImage(img, 0, 0);
 
   // 載入字體
-  await document.fonts.load("36px 'ChenYuluoyan'");
-  await document.fonts.load("26px 'ChenYuluoyan'");
-  await document.fonts.load("22px 'ChenYuluoyan'");
+  await document.fonts.load("47px 'ChenYuluoyan'");
+  await document.fonts.load("30px 'ChenYuluoyan'");
 
   ctx.fillStyle = '#2b4a9e';
-  ctx.font = "36px 'ChenYuluoyan', 'PingFang TC', sans-serif";
+  ctx.font = "47px 'ChenYuluoyan', 'PingFang TC', sans-serif";
   ctx.textBaseline = 'top';
 
   const W = canvas.width, H = canvas.height;
@@ -236,22 +235,25 @@ async function renderReceiptCanvas(receipt) {
 
   ctx.fillText(receipt.name, W * 0.22, H * 0.11);
 
-  ctx.font = "22px 'ChenYuluoyan', 'PingFang TC', sans-serif";
+  ctx.font = "30px 'ChenYuluoyan', 'PingFang TC', sans-serif";
   ctx.fillText(String(rocYear), W * 0.685, H * 0.13);
   ctx.fillText(String(month), W * 0.79, H * 0.13);
   ctx.fillText(String(day), W * 0.90, H * 0.13);
 
-  ctx.font = "26px 'ChenYuluoyan', 'PingFang TC', sans-serif";
+  ctx.font = "30px 'ChenYuluoyan', 'PingFang TC', sans-serif";
   ctx.fillText(receipt.receiptItem, W * 0.09, H * 0.28);
   ctx.fillText('1', W * 0.35, H * 0.28);
   ctx.fillText(feeStr, W * 0.445, H * 0.28);
   ctx.fillText(feeStr, W * 0.57, H * 0.28);
 
-  // 合計金額右對齊：位數增加時整個往左擴展（萬/仟/佰/拾/元）
+  // 合計金額：個位數在十位數處、十位數在百位數號，整個往左移一格
   const digitX = [0.315, 0.405, 0.495, 0.585, 0.675];
-  const startIdx = digitX.length - feeStr.length;
+  // 目前的 0.315 是萬，但實際上 1700 的 1 應在 0.315 位置（仟），所以整組向左移一欄
+  const shiftedDigitX = [0.225, 0.315, 0.405, 0.495, 0.585];
+  const startIdx = shiftedDigitX.length - feeStr.length;
+  ctx.font = "30px 'ChenYuluoyan', 'PingFang TC', sans-serif";
   for (let i = 0; i < feeStr.length; i++) {
-    ctx.fillText(feeStr[i], W * digitX[startIdx + i], H * 0.815);
+    ctx.fillText(feeStr[i], W * shiftedDigitX[startIdx + i], H * 0.815);
   }
 
   return canvas;
