@@ -30,10 +30,10 @@
   .receipt-stage.show{display:block;}
   .receipt-wrap{width:100%; max-width:360px; margin:0 auto; transform-style:preserve-3d; transition:transform .1s; cursor:grab;}
   .receipt-wrap:active{cursor:grabbing;}
-  .receipt-wrap.idle{animation:idleSpin 8s ease-in-out infinite;}
+  .receipt-wrap.idle{animation:idleSpin 6s ease-in-out infinite;}
   @keyframes idleSpin{
-    0%,100%{transform:rotateX(4deg) rotateY(-10deg);}
-    50%{transform:rotateX(-2deg) rotateY(10deg);}
+    0%,100%{transform:rotateX(5deg) rotateY(-13deg);}
+    50%{transform:rotateX(-3deg) rotateY(13deg);}
   }
   .receipt{position:relative; width:100%; border-radius:8px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.18); background:#fff;}
   .receipt canvas{width:100%; display:block; border-radius:8px;}
@@ -173,15 +173,13 @@ function showResult(type, message) {
 
 function init3DTilt() {
   const wrap = $('receiptWrap');
-  let isDragging = false, startX, startY, rotX = 4, rotY = -10;
-
-  wrap.classList.remove('idle');
+  let isDragging = false, startX, startY, rotX = 5, rotY = -13;
 
   const onMove = (x, y) => {
     const dx = x - startX;
     const dy = y - startY;
-    rotY = Math.max(-25, Math.min(25, -10 + dx * 0.3));
-    rotX = Math.max(-25, Math.min(25, 4 - dy * 0.3));
+    rotY = Math.max(-30, Math.min(30, -13 + dx * 0.3));
+    rotX = Math.max(-30, Math.min(30, 5 - dy * 0.3));
     wrap.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
   };
 
