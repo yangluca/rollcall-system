@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>師大影像藝術創作社 · 點名繳費收據系統</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#fff; --fg:#0a0a0a; --muted:#6b6b6b; --line:#e8e8e8;
+    --radius:16px; --shadow:0 4px 24px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0; font-family:'Space Grotesk','PingFang TC',sans-serif; background:var(--bg); color:var(--fg);}
+  .wrap{min-height:100%; max-width:420px; margin:0 auto; padding:24px 20px 40px; display:flex; flex-direction:column;}
+  header{margin-bottom:32px; text-align:center;}
+  h1{font-size:24px; font-weight:600; margin:0 0 8px; letter-spacing:-.02em;}
+  .subtitle{color:var(--muted); font-size:15px; line-height:1.5;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); margin-bottom:16px; text-decoration:none; color:inherit; display:block; transition:transform .1s, box-shadow .15s;}
+  .card:active{transform:scale(.98);}
+  .card-title{font-size:18px; font-weight:600; margin-bottom:6px;}
+  .card-desc{font-size:14px; color:var(--muted); line-height:1.5;}
+  .arrow{float:right; color:var(--muted); font-size:20px;}
+  footer{margin-top:auto; padding-top:24px; text-align:center; font-size:12px; color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>師大影像藝術創作社</h1>
+    <div class="subtitle">點名繳費收據系統<br>選擇你的使用角色</div>
+  </header>
+
+  <a href="checkin.html" class="card">
+    <span class="arrow">→</span>
+    <div class="card-title">社員簽到</div>
+    <div class="card-desc">輸入姓名與電話末四碼，查詢今日社課繳費狀態。</div>
+  </a>
+
+  <a href="admin.html" class="card">
+    <span class="arrow">→</span>
+    <div class="card-title">幹部收款</div>
+    <div class="card-desc">用末四碼定位社員、確認收款、產生領取密碼。</div>
+  </a>
+
+  <a href="receipt.html" class="card">
+    <span class="arrow">→</span>
+    <div class="card-title">領取收據</div>
+    <div class="card-desc">輸入 6 位密碼，領取 3D 電子收據並下載。</div>
+  </a>
+
+  <footer>
+    師大影像藝術創作社 · 點名繳費收據系統
+  </footer>
+</div>
+</body>
+</html>
