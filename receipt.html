@@ -255,14 +255,14 @@ async function renderReceiptCanvas(receipt) {
   ctx.fillText(feeStr, W * 0.445, H * 0.28);
   ctx.fillText(feeStr, W * 0.57, H * 0.28);
 
-  // 合計金額：個位數在十位數處、十位數在百位數號，整個往左移一格
-  const digitX = [0.315, 0.405, 0.495, 0.585, 0.675];
-  // 目前的 0.315 是萬，但實際上 1700 的 1 應在 0.315 位置（仟），所以整組向左移一欄
-  const shiftedDigitX = [0.225, 0.315, 0.405, 0.495, 0.585];
+  // 合計金額：個位數在十位數處、十位數在百位數號
+  // 目前的 0.315 是仟，整組再往右移 5%
+  const shiftedDigitX = [0.275, 0.365, 0.455, 0.545, 0.635];
   const startIdx = shiftedDigitX.length - feeStr.length;
+  const cnDigit = ['零','壹','貳','參','肆','伍','陸','柒','捌','玖'];
   ctx.font = "30px 'ChenYuluoyan', 'PingFang TC', sans-serif";
   for (let i = 0; i < feeStr.length; i++) {
-    ctx.fillText(feeStr[i], W * shiftedDigitX[startIdx + i], H * 0.815);
+    ctx.fillText(cnDigit[parseInt(feeStr[i])], W * shiftedDigitX[startIdx + i], H * 0.815);
   }
 
   return canvas;
