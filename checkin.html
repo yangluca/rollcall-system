@@ -127,7 +127,7 @@ $('btnCheckin').addEventListener('click', async () => {
 
   try {
     const data = await callAPI('checkin', { name, last4 });
-    renderResult(data, name, last4);
+    renderResult(data);
   } catch (err) {
     showResult('err', err.message || '連線發生問題，請確認網路後再試');
   } finally {
@@ -143,11 +143,7 @@ function showResult(type, message) {
   `;
 }
 
-let pollTimer = null;
-
-function renderResult(data, name, last4) {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-
+function renderResult(data) {
   if (data.status === 'error') {
     showResult('err', data.message);
     return;
@@ -186,73 +182,29 @@ function renderResult(data, name, last4) {
 
     $('resultContent').innerHTML = html;
   } else {
-    // 需要繳費 → 顯示等待狀態並啟動輪詢
+    // 需要繳費 → 提示櫃檯繳現金，並提供手動輸入 6 位碼入口
     $('resultContent').innerHTML = `
       <div class="status pay"><span>$</span>需要繳費</div>
       <div class="detail">
-        <b>${memberName}</b>請到櫃檯繳交現金。
+        <b>${memberName}</b>請到櫃檯繳交現金，幹部確認後會提供 6 位領收據密碼。
       </div>
       <div class="fee-box">
         <div class="amount">${formatMoney(data.fee)}</div>
         <div class="unit">${data.receiptItem}</div>
       </div>
-      <div id="pollStatus" style="text-align:center;color:var(--muted);padding:18px 0;font-size:14px;">
-        繳費完成後，畫面會自動出現領取密碼…
-      </div>
+      <label for="receiptCode" style="margin-top:12px;">6 位領收據密碼</label>
+      <input type="tel" id="receiptCode" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}">
+      <button class="btn" id="btnGoReceipt">前往領取收據 →</button>
     `;
-    startPolling(name, last4);
+    $('btnGoReceipt').addEventListener('click', () => {
+      const code = $('receiptCode').value.trim();
+      if (!/^\d{6}$/.test(code)) {
+        showResult('err', '請輸入幹部提供的 6 位密碼');
+        return;
+      }
+      window.location.href = `receipt.html?code=${encodeURIComponent(code)}`;
+    });
   }
-}
-
-function startPolling(name, last4) {
-  let attempts = 0;
-  const maxAttempts = 200; // 200 × 3 秒 = 10 分鐘後停止
-
-  pollTimer = setInterval(async () => {
-    attempts++;
-    if (attempts > maxAttempts) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-      const el = $('pollStatus');
-      if (el) el.innerHTML = '等待逾時，請洽幹部確認。';
-      return;
-    }
-
-    try {
-      const res = await callAPI('pollCode', { name, last4 });
-      if (res.code) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-        const el = $('pollStatus');
-        if (el) {
-          el.innerHTML = `
-            <div style="color:var(--ok);font-weight:600;font-size:16px;margin-bottom:10px;">✓ 收款完成</div>
-            <div style="background:#f0f7ff;border:2px solid var(--blue);border-radius:12px;padding:16px;">
-              <div style="font-size:32px;font-weight:600;color:var(--blue);letter-spacing:.2em;">${res.code}</div>
-            </div>
-            <a href="receipt.html?code=${res.code}" style="display:block;margin-top:14px;padding:14px;background:#0a0a0a;color:#fff;border-radius:12px;font-weight:600;text-decoration:none;">領取收據 →</a>
-          `;
-        }
-      } else if (res.debug) {
-        // 診斷資訊（除錯用）：顯示 records 實際資料
-        const el = $('pollStatus');
-        if (el) {
-          el.innerHTML = '繳費完成後，畫面會自動出現領取密碼…<br>' +
-            '<span style="color:#9a6700;font-size:12px;margin-top:6px;display:inline-block;">' +
-            '[診斷] 查詢末四碼=<b>' + res.debug.targetLast4 + '</b> · records 共 <b>' + res.debug.recordCount + '</b> 筆 · 最近：' +
-            JSON.stringify(res.debug.recent) + '</span>';
-        }
-      }
-    } catch (e) {
-      // 顯示錯誤，方便定位問題（也讓使用者知道出狀況了）
-      const el = $('pollStatus');
-      if (el) {
-        el.innerHTML = '繳費完成後，畫面會自動出現領取密碼…<br>' +
-          '<span style="color:#cf222e;font-size:12px;margin-top:6px;display:inline-block;">' +
-          '（偵測到錯誤：' + (e.message || '連線失敗') + '）</span>';
-      }
-    }
-  }, 3000);
 }
 </script>
 </body>
