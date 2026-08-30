@@ -233,6 +233,15 @@ function startPolling(name, last4) {
             <a href="receipt.html?code=${res.code}" style="display:block;margin-top:14px;padding:14px;background:#0a0a0a;color:#fff;border-radius:12px;font-weight:600;text-decoration:none;">領取收據 →</a>
           `;
         }
+      } else if (res.debug) {
+        // 診斷資訊（除錯用）：顯示 records 實際資料
+        const el = $('pollStatus');
+        if (el) {
+          el.innerHTML = '繳費完成後，畫面會自動出現領取密碼…<br>' +
+            '<span style="color:#9a6700;font-size:12px;margin-top:6px;display:inline-block;">' +
+            '[診斷] 查詢末四碼=<b>' + res.debug.targetLast4 + '</b> · records 共 <b>' + res.debug.recordCount + '</b> 筆 · 最近：' +
+            JSON.stringify(res.debug.recent) + '</span>';
+        }
       }
     } catch (e) {
       // 顯示錯誤，方便定位問題（也讓使用者知道出狀況了）

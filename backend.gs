@@ -648,7 +648,24 @@ function pollCode(data) {
     }
   }
 
-  return jsonResponse({ status: 'ok', code: null });
+  // 找不到 code：回傳診斷資訊，方便對照 records 分頁實際資料（除錯用）
+  const recent = [];
+  for (let i = Math.max(1, rows.length - 3); i < rows.length; i++) {
+    recent.push({
+      last4: String(rows[i][4] != null ? rows[i][4] : ''),
+      paid: String(rows[i][8] != null ? rows[i][8] : ''),
+      code: String(rows[i][9] != null ? rows[i][9] : '(空)')
+    });
+  }
+  return jsonResponse({
+    status: 'ok',
+    code: null,
+    debug: {
+      targetLast4: last4,
+      recordCount: Math.max(0, rows.length - 1),
+      recent: recent
+    }
+  });
 }
 
 // ============ 幹部驗證 ============
