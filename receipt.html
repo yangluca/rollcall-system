@@ -229,16 +229,20 @@ async function renderReceiptCanvas(receipt) {
   img.src = 'receipt-scan.jpg';
   await new Promise(r => img.onload = r);
 
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
+  const crop = 22; // 裁掉底圖四邊邊框，讓毛邊能明顯突出
+  const W = img.naturalWidth - crop * 2;
+  const H = img.naturalHeight - crop * 2;
 
-  ctx.drawImage(img, 0, 0);
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // 裁切底圖，去除邊框
+  ctx.drawImage(img, crop, crop, W, H, 0, 0, W, H);
 
   // 給收據邊緣加紙質毛邊（在底圖之上、文字之下）
-  drawPaperEdge(ctx, W, H, { bleed: 40, teeth: 160, variance: 18, color: 'rgba(60,55,48,0.55)' });
+  drawPaperEdge(ctx, W, H, { bleed: 36, teeth: 160, variance: 16, color: 'rgba(60,55,48,0.55)' });
 
   // 載入字體
   await document.fonts.load("47px 'ChenYuluoyan'");
