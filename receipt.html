@@ -26,9 +26,9 @@
   .btn{width:100%; padding:16px; font-size:17px; font-weight:600; border:none; border-radius:12px; background:var(--fg); color:#fff; cursor:pointer; margin-top:12px; transition:transform .1s, opacity .15s;}
   .btn:active{transform:scale(.98);}
   .btn:disabled{opacity:.5; cursor:not-allowed;}
-  .receipt-stage{perspective:1200px; margin:20px 0; display:none;}
+  .receipt-stage{perspective:1200px; margin:20px 0; display:none; overflow:visible;}
   .receipt-stage.show{display:block;}
-  .receipt-wrap{width:100%; max-width:360px; margin:0 auto; transform-style:preserve-3d; transition:transform .1s; cursor:grab;}
+  .receipt-wrap{width:100%; max-width:360px; margin:0 auto; transform-style:preserve-3d; transition:transform .1s; cursor:grab; overflow:visible; padding:40px;}
   .receipt-wrap:active{cursor:grabbing;}
   .receipt-wrap.idle{animation:idleSpin 5s ease-in-out infinite;}
   @keyframes idleSpin{
@@ -238,7 +238,7 @@ async function renderReceiptCanvas(receipt) {
   ctx.drawImage(img, 0, 0);
 
   // 給收據邊緣加紙質毛邊（在底圖之上、文字之下）
-  drawPaperEdge(ctx, W, H, { bleed: 14, teeth: 100, variance: 7, color: '#e6e1d8' });
+  drawPaperEdge(ctx, W, H, { bleed: 40, teeth: 160, variance: 18, color: 'rgba(60,55,48,0.55)' });
 
   // 載入字體
   await document.fonts.load("47px 'ChenYuluoyan'");
