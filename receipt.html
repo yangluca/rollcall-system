@@ -229,20 +229,18 @@ async function renderReceiptCanvas(receipt) {
   img.src = 'receipt-scan.jpg';
   await new Promise(r => img.onload = r);
 
-  const crop = 22; // 裁掉底圖四邊邊框，讓毛邊能明顯突出
-  const W = img.naturalWidth - crop * 2;
-  const H = img.naturalHeight - crop * 2;
-
   const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
   const ctx = canvas.getContext('2d');
 
-  // 裁切底圖，去除邊框
-  ctx.drawImage(img, crop, crop, W, H, 0, 0, W, H);
+  // 保留原圖完整邊界，不裁切
+  ctx.drawImage(img, 0, 0);
+
+  const W = canvas.width, H = canvas.height;
 
   // 給收據邊緣加紙質毛邊（在底圖之上、文字之下）
-  drawPaperEdge(ctx, W, H, { bleed: 36, teeth: 160, variance: 16, color: 'rgba(60,55,48,0.55)' });
+  drawPaperEdge(ctx, W, H, { density: 160, depth: 16, color: 'rgba(45,45,45,0.75)' });
 
   // 載入字體
   await document.fonts.load("47px 'ChenYuluoyan'");
@@ -308,66 +306,50 @@ async function drawStamp(ctx, x, y, size) {
 
 // 畫紙質毛邊：沿著收據四邊不規則鋰齒
 function drawPaperEdge(ctx, W, H, opts) {
-  const bleed = opts.bleed || 14;
-  const teeth = opts.teeth || 100;
-  const variance = opts.variance || 7;
-  const color = opts.color || 'rgba(90,82,68,0.35)';
-
-  function noisyPoint(x, y, nx, ny, t) {
-    // (nx, ny) 為邊緣法線方向，用來將搖動限制在垂直於邊的方向
-    const len = Math.hypot(nx, ny) || 1;
-    const ux = nx / len, uy = ny / len;
-    const jitter = (Math.random() - 0.5) * variance * (0.6 + Math.random() * 0.8);
-    return { x: x + ux * jitter, y: y + uy * jitter };
-  }
+  const density = opts.density || 160;
+  const depth = opts.depth || 14;
+  const color = opts.color || 'rgba(45,45,45,0.75)';
 
   ctx.save();
-  ctx.strokeStyle = color;
   ctx.fillStyle = color;
-  ctx.lineWidth = 1.2;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
 
-  // 畫出毛邊輪廓（在底圖之上）
-  ctx.beginPath();
-  let pts = [];
+  // 在四邊畫出不規則紙精毛邊
+  const sides = [
+    { from: [0, 0], to: [W, 0], normal: [0, -1] },
+    { from: [W, 0], to: [W, H], normal: [1, 0] },
+    { from: [W, H], to: [0, H], normal: [0, 1] },
+    { from: [0, H], to: [0, 0], normal: [-1, 0] }
+  ];
 
-  // 上邊
-  for (let i = 0; i <= teeth; i++) {
-    const t = i / teeth;
-    const p = noisyPoint(-bleed + (W + bleed * 2) * t, -bleed, 0, -1, t);
-    pts.push(p);
-  }
-  // 右邊
-  for (let i = 0; i <= teeth; i++) {
-    const t = i / teeth;
-    const p = noisyPoint(W + bleed, -bleed + (H + bleed * 2) * t, 1, 0, t);
-    pts.push(p);
-  }
-  // 下邊
-  for (let i = 0; i <= teeth; i++) {
-    const t = i / teeth;
-    const p = noisyPoint(W + bleed - (W + bleed * 2) * t, H + bleed, 0, 1, t);
-    pts.push(p);
-  }
-  // 左邊
-  for (let i = 0; i <= teeth; i++) {
-    const t = i / teeth;
-    const p = noisyPoint(-bleed, H + bleed - (H + bleed * 2) * t, -1, 0, t);
-    pts.push(p);
-  }
+  for (const side of sides) {
+    const [x1, y1] = side.from;
+    const [x2, y2] = side.to;
+    const [nx, ny] = side.normal;
 
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) {
-    ctx.lineTo(pts[i].x, pts[i].y);
+    for (let i = 0; i < density; i++) {
+      const t = i / density;
+      const x = x1 + (x2 - x1) * t;
+      const y = y1 + (y2 - y1) * t;
+      const d = depth * (0.5 + Math.random() * 0.8);
+      const wiggle = (Math.random() - 0.5) * depth * 0.6;
+
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + nx * d + (ny === 0 ? 0 : wiggle), y + ny * d + (nx === 0 ? 0 : wiggle));
+      ctx.stroke();
+
+      // 再加一些小粒點增加紙精感
+      if (Math.random() > 0.4) {
+        ctx.beginPath();
+        const px = x + nx * d * 0.5 + (Math.random() - 0.5) * depth;
+        const py = y + ny * d * 0.5 + (Math.random() - 0.5) * depth;
+        ctx.arc(px, py, 0.6 + Math.random(), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
-  ctx.closePath();
-
-  // 加上內部矩形（使用 evenodd fill rule 只填充外圍毛邊，不蓋住底圖）
-  ctx.rect(0, 0, W, H);
-
-  // 填充毛邊輪廓（evenodd）
-  ctx.fill('evenodd');
 
   ctx.restore();
 }
