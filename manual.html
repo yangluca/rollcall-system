@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>幹部操作手冊 · 師大影像藝術創作社</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#fff; --fg:#0a0a0a; --muted:#6b6b6b; --line:#e8e8e8;
+    --blue:#2b4a9e; --warn:#9a6700; --err:#cf222e; --ok:#1a7f37;
+    --radius:16px; --shadow:0 4px 24px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; font-family:'Space Grotesk','PingFang TC',sans-serif; background:var(--bg); color:var(--fg); line-height:1.7;}
+  .wrap{max-width:720px; margin:0 auto; padding:32px 20px 64px;}
+  header{margin-bottom:36px; border-bottom:1px solid var(--line); padding-bottom:24px;}
+  h1{font-size:28px; font-weight:600; margin:0 0 6px; letter-spacing:-.02em;}
+  .subtitle{color:var(--muted); font-size:15px;}
+  h2{font-size:20px; font-weight:600; margin:40px 0 14px; letter-spacing:-.01em;}
+  h2 .num{color:var(--muted); font-weight:400; margin-right:8px; font-size:16px;}
+  h3{font-size:16px; font-weight:600; margin:24px 0 8px;}
+  p{margin:10px 0; color:#2a2a2a;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow); margin:14px 0;}
+  .step{display:flex; gap:14px; margin:14px 0; align-items:flex-start;}
+  .step .badge{flex-shrink:0; width:28px; height:28px; border-radius:50%; background:var(--fg); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; margin-top:2px;}
+  .step .txt{flex:1;}
+  .step .txt b{font-weight:600;}
+  .table{width:100%; border-collapse:collapse; margin:14px 0; font-size:14px;}
+  .table th,.table td{border:1px solid var(--line); padding:10px 12px; text-align:left; vertical-align:top;}
+  .table th{background:#fafafa; font-weight:600; font-size:13px; color:var(--muted);}
+  .table td code,.inline-code{background:#f5f5f5; border-radius:6px; padding:2px 7px; font-size:13px; font-family:'Space Grotesk',monospace;}
+  .callout{border-left:3px solid var(--warn); background:#fffaf0; border-radius:0 12px 12px 0; padding:14px 18px; margin:16px 0; font-size:14px;}
+  .callout.err{border-left-color:var(--err); background:#fff5f5;}
+  .callout.ok{border-left-color:var(--ok); background:#f2fff5;}
+  .callout b{font-weight:600;}
+  .tag{display:inline-block; font-size:11px; padding:2px 10px; border-radius:20px; background:var(--line); color:var(--muted); margin-left:8px; vertical-align:middle; font-weight:500;}
+  .tag.todo{background:#eef2ff; color:var(--blue);}
+  .tag.hot{background:#fff0f0; color:var(--err);}
+  .divider{height:1px; background:var(--line); margin:32px 0;}
+  ul{margin:8px 0; padding-left:20px;}
+  li{margin:6px 0;}
+  a{color:var(--blue); text-decoration:none;}
+  footer{margin-top:48px; text-align:center; font-size:12px; color:var(--muted); border-top:1px solid var(--line); padding-top:24px;}
+  .toc{background:#fafafa; border-radius:var(--radius); padding:18px 22px; margin:20px 0; font-size:14px;}
+  .toc a{display:block; padding:3px 0; color:var(--fg); text-decoration:none;}
+  .toc a:hover{color:var(--blue);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>幹部操作手冊</h1>
+    <div class="subtitle">師大影像藝術創作社 · 點名繳費收據系統</div>
+  </header>
+
+  <div class="toc">
+    <b style="font-size:13px;color:var(--muted);">目錄</b>
+    <a href="#overview">1. 系統是什麼</a>
+    <a href="#urls">2. 三個網址</a>
+    <a href="#flow">3. 現場收款完整流程</a>
+    <a href="#before">4. 開課前準備</a>
+    <a href="#fees">5. 社費設定</a>
+    <a href="#password">6. 改幹部密碼</a>
+    <a href="#members">7. 報名名單</a>
+    <a href="#rules">8. 三個鐵則</a>
+    <a href="#faq">9. 常見問題</a>
+  </div>
+
+  <h2 id="overview"><span class="num">1.</span>系統是什麼</h2>
+  <p>這套系統取代 Accupass 等售票平台，用來做三件事：<b>社員簽到、收社費、發電子收據</b>。全部資料都存在我們自己的 Google 試算表，不收平台抽成。</p>
+  <p>幹部要做的只有兩件事：<b>開課前填課程表</b>、<b>現場用後台收款</b>。不用寫程式。</p>
+
+  <h2 id="urls"><span class="num">2.</span>三個網址</h2>
+  <table class="table">
+    <tr><th>頁面</th><th>誰用</th><th>用途</th></tr>
+    <tr><td><code>…/rollcall-system/</code></td><td>所有人</td><td>入口，選角色</td></tr>
+    <tr><td><code>…/rollcall-system/checkin.html</code></td><td>社員</td><td>簽到、查繳費狀態</td></tr>
+    <tr><td><code>…/rollcall-system/admin.html</code></td><td><b>幹部</b></td><td>定位收款、手動代簽</td></tr>
+    <tr><td><code>…/rollcall-system/receipt.html</code></td><td>社員</td><td>輸入密碼領收據</td></tr>
+  </table>
+  <p style="font-size:13px;color:var(--muted);">完整網址：<code>https://yangluca.github.io/rollcall-system/</code></p>
+
+  <h2 id="flow"><span class="num">3.</span>現場收款完整流程 <span class="tag hot">幹部主要工作</span></h2>
+
+  <h3>前置：開課前先填課程表</h3>
+  <div class="step"><div class="badge">1</div><div class="txt">開 Google 試算表 → <b>courses</b> 分頁，新增一列：日期填<b>今天</b>（民國年如 <code>115/8/30</code>）、課程名稱、品名、active 填 <code>TRUE</code>。詳見第 4 節。</div></div>
+
+  <h3>現場：社員到場</h3>
+  <div class="step"><div class="badge">2</div><div class="txt">社員用手機開 <b>checkin.html</b>，輸入姓名 + 電話末四碼。畫面會顯示兩種結果之一：<br>① <b>「需要繳費 $金額」</b> → 請他到櫃檯繳現金<br>② <b>「簽到成功」</b> → 已繳過學期費，直接過。</div></div>
+
+  <h3>現場：幹部收款</h3>
+  <div class="step"><div class="badge">3</div><div class="txt">幹部開 <b>admin.html</b>，輸入<b>幹部密碼</b> + 社員<b>電話末四碼</b> → 點「定位社員」。</div></div>
+  <div class="step"><div class="badge">4</div><div class="txt">畫面顯示社員<b>姓名、身分、應繳金額</b>。確認無誤後<b>收現金</b>。</div></div>
+  <div class="step"><div class="badge">5</div><div class="txt">點「<b>確認已收現金</b>」→ 螢幕出現一個 <b>6 位數密碼</b>。</div></div>
+  <div class="step"><div class="badge">6</div><div class="txt"><b>口頭報這 6 位密碼</b>給社員。</div></div>
+
+  <h3>現場：社員領收據</h3>
+  <div class="step"><div class="badge">7</div><div class="txt">社員開 <b>receipt.html</b>，輸入 6 位密碼 → 領取 3D 電子收據 → 可下載圖片存檔。</div></div>
+
+  <div class="callout"><b>沒帶手機的社員？</b> 用 admin.html 切到「<b>手動代簽</b>」分頁，填姓名、末四碼、身分、類型即可代簽到，同樣收現金後產生密碼。</div>
+
+  <div class="callout ok"><b>學期社員</b>第一次繳學期費後，之後每堂簽到都直接顯示「簽到成功」+ 歷史收據，<b>不用再繳、不用再找幹部</b>。</div>
+
+  <h2 id="before"><span class="num">4.</span>開課前準備：課程表</h2>
+  <p>每堂社課前，在試算表 <b>courses</b> 分頁新增一列（<b>不要動第一列標題</b>）：</p>
+  <table class="table">
+    <tr><th>欄位</th><th>說明</th><th>範例</th></tr>
+    <tr><td>date</td><td>上課日期（民國年或西元年皆可）</td><td><code>115/8/30</code></td></tr>
+    <tr><td>name</td><td>課程名稱</td><td>攝影基礎</td></tr>
+    <tr><td>receiptItem</td><td>收據上的品名</td><td>單堂社課</td></tr>
+    <tr><td>active</td><td>是否開放簽到</td><td><code>TRUE</code></td></tr>
+  </table>
+  <div class="callout"><b>重點：</b>只有「<code>date = 今天</code>」且「<code>active = TRUE</code>」的那一列會開放簽到。日期過了就自動失效，不用手動關閉。如果想提前關閉某堂，把 active 改成 <code>FALSE</code> 即可。</div>
+
+  <h2 id="fees"><span class="num">5.</span>社費設定</h2>
+  <p>在 <b>fees</b> 分頁，左欄是代碼（<b>別改</b>），右欄是金額（可改）。開學調整一次即可：</p>
+  <table class="table">
+    <tr><th>左欄 key（別動）</th><th>右欄金額（可改）</th><th>意義</th></tr>
+    <tr><td><code>studentSemesterFee</code></td><td>1700</td><td>學生 · 學期社費</td></tr>
+    <tr><td><code>publicSemesterFee</code></td><td>3200</td><td>社會人士 · 學期社費</td></tr>
+    <tr><td><code>studentSingleFee</code></td><td>250</td><td>學生 · 單堂社費</td></tr>
+    <tr><td><code>publicSingleFee</code></td><td>450</td><td>社會人士 · 單堂社費</td></tr>
+  </table>
+  <p style="font-size:13px;color:var(--muted);">學年度自動計算：9 月～隔年 1 月是第一學期、2 月～8 月是第二學期。收據品名會自動產生，如「114-1 學期社費」。</p>
+
+  <h2 id="password"><span class="num">6.</span>改幹部密碼</h2>
+  <p>在 <b>staff</b> 分頁：第一欄是幹部姓名、第二欄是密碼。要改密碼直接改第二欄的數字即可。</p>
+  <div class="callout err"><b>安全提醒：</b>幹部密碼是後台收款的金鑰，請定期更換，且不要寫在公開的地方。</div>
+
+  <h2 id="members"><span class="num">7.</span>報名名單</h2>
+  <p><b>members</b> 分頁是社員資料，通常由報名流程自動寫入，幹部只在補資料或修正時手動編輯。</p>
+  <table class="table">
+    <tr><th>欄位</th><th>說明</th></tr>
+    <tr><td>name</td><td>姓名</td></tr>
+    <tr><td>phone</td><td>電話</td></tr>
+    <tr><td>email</td><td>信箱</td></tr>
+    <tr><td>identity</td><td><code>student</code>（學生）/ <code>public</code>（社會人士）</td></tr>
+    <tr><td>memberType</td><td><code>single</code>（單堂）/ <code>semester</code>（學期）</td></tr>
+    <tr><td>paidSemester</td><td>是否已繳學期費（<code>TRUE</code>/<code>FALSE</code>）</td></tr>
+  </table>
+  <div class="callout"><b>報名表單（待設定）</b> <span class="tag todo">TODO</span><br>之後會用 Google 表單讓社員報名，回覆自動寫入 members。等社課確定後再設定，目前先用「手動代簽」或直接填 members。</div>
+
+  <h2 id="rules"><span class="num">8.</span>三個鐵則</h2>
+  <div class="card">
+    <div class="step"><div class="badge">1</div><div class="txt"><b>不要動第一列（標題列），也不要調換欄位順序</b> — 程式靠「位置」讀資料，動了就壞。</div></div>
+    <div class="step"><div class="badge">2</div><div class="txt"><b>日期</b>填民國年（<code>115/8/30</code>）或西元年（<code>2026/8/30</code>）都可以，系統自動辨識。</div></div>
+    <div class="step"><div class="badge">3</div><div class="txt"><b><code>records</code> 分頁完全不要碰</b> — 那是系統的簽到繳費流水帳，自動寫入，手動改會亂掉。</div></div>
+  </div>
+
+  <h2 id="faq"><span class="num">9.</span>常見問題</h2>
+  <div class="card">
+    <p><b>Q：定位社員時顯示「找不到報名資料」？</b><br>表示該末四碼還沒在 members 名單。請先用「手動代簽」補資料，或請社員重新報名。</p>
+    <p><b>Q：社員說「今天沒有開放簽到的社課」？</b><br>檢查 courses 分頁：今天的課程有沒有填、active 是不是 <code>TRUE</code>、日期是不是今天。</p>
+    <p><b>Q：密碼報給社員後，他領不到收據？</b><br>密碼是一次性的，用過就失效。確認社員輸入的 6 位數完全一致（不要看錯 0/O、1/I）。</p>
+    <p><b>Q：學期社員繳過費，但之後簽到還要他繳費？</b><br>檢查 members 分頁他的 <code>paidSemester</code> 是不是 <code>TRUE</code>，以及 <code>memberType</code> 是不是 <code>semester</code>。</p>
+    <p><b>Q：要寄收據給沒帶手機的社員？</b><br>收據圖片會寫進 records 分頁，含姓名與金額。幹部從 members 找到該社員 Email，手動把收據寄出即可。</p>
+  </div>
+
+  <div class="divider"></div>
+  <p style="font-size:13px;color:var(--muted);text-align:center;">本手冊可隨時更新。遇到問題或流程變更，請聯繫系統維護者。</p>
+
+  <footer>
+    師大影像藝術創作社 · 點名繳費收據系統<br>幹部操作手冊
+  </footer>
+</div>
+</body>
+</html>
