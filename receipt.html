@@ -159,6 +159,15 @@ function showReceipt(receipt) {
     canvas.style.width = '100%';
     canvas.style.display = 'block';
     canvas.style.borderRadius = '8px';
+
+    // 收據紀錄留存：把生成的收據圖片上傳到後端 Drive（fire-and-forget，失敗不影響顯示）
+    if (receipt.code) {
+      try {
+        const dataUrl = canvas.toDataURL('image/png');
+        callAPI('uploadReceiptImage', { code: receipt.code, imageBase64: dataUrl })
+          .catch(() => {});
+      } catch (e) {}
+    }
   });
   init3DTilt();
 }
@@ -288,6 +297,16 @@ async function drawStamp(ctx, x, y, size) {
     stamp.onerror = () => resolve();
   });
 }
+
+// 從簽到頁帶 code 過來（receipt.html?code=XXXXXX）：自動填入並直接領取
+(function autoRedeemFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const code = (params.get('code') || '').trim();
+  if (!/^\d{6}$/.test(code)) return;
+  $('code').value = code;
+  // 略延遲，確保事件監聽已註冊
+  setTimeout(() => $('btnRedeem').click(), 400);
+})();
 </script>
 </body>
 </html>

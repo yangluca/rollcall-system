@@ -127,7 +127,7 @@ $('btnCheckin').addEventListener('click', async () => {
 
   try {
     const data = await callAPI('checkin', { name, last4 });
-    renderResult(data);
+    renderResult(data, name, last4);
   } catch (err) {
     showResult('err', err.message || '連線發生問題，請確認網路後再試');
   } finally {
@@ -143,7 +143,11 @@ function showResult(type, message) {
   `;
 }
 
-function renderResult(data) {
+let pollTimer = null;
+
+function renderResult(data, name, last4) {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+
   if (data.status === 'error') {
     showResult('err', data.message);
     return;
@@ -182,19 +186,58 @@ function renderResult(data) {
 
     $('resultContent').innerHTML = html;
   } else {
-    // 需要繳費
+    // 需要繳費 → 顯示等待狀態並啟動輪詢
     $('resultContent').innerHTML = `
       <div class="status pay"><span>$</span>需要繳費</div>
       <div class="detail">
-        <b>${memberName}</b>請到櫃檯繳交現金，幹部確認後會提供 6 位領收據密碼。
+        <b>${memberName}</b>請到櫃檯繳交現金。
       </div>
       <div class="fee-box">
         <div class="amount">${formatMoney(data.fee)}</div>
         <div class="unit">${data.receiptItem}</div>
       </div>
-      <a href="receipt.html" class="btn secondary">前往領收據 →</a>
+      <div id="pollStatus" style="text-align:center;color:var(--muted);padding:18px 0;font-size:14px;">
+        繳費完成後，畫面會自動出現領取密碼…
+      </div>
     `;
+    startPolling(name, last4);
   }
+}
+
+function startPolling(name, last4) {
+  let attempts = 0;
+  const maxAttempts = 200; // 200 × 3 秒 = 10 分鐘後停止
+
+  pollTimer = setInterval(async () => {
+    attempts++;
+    if (attempts > maxAttempts) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      const el = $('pollStatus');
+      if (el) el.innerHTML = '等待逾時，請洽幹部確認。';
+      return;
+    }
+
+    try {
+      const res = await callAPI('pollCode', { name, last4 });
+      if (res.code) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        const el = $('pollStatus');
+        if (el) {
+          el.innerHTML = `
+            <div style="color:var(--ok);font-weight:600;font-size:16px;margin-bottom:10px;">✓ 收款完成</div>
+            <div style="background:#f0f7ff;border:2px solid var(--blue);border-radius:12px;padding:16px;">
+              <div style="font-size:32px;font-weight:600;color:var(--blue);letter-spacing:.2em;">${res.code}</div>
+            </div>
+            <a href="receipt.html?code=${res.code}" style="display:block;margin-top:14px;padding:14px;background:#0a0a0a;color:#fff;border-radius:12px;font-weight:600;text-decoration:none;">領取收據 →</a>
+          `;
+        }
+      }
+    } catch (e) {
+      // 輪詢偶發失敗（如暫時斷網），繼續等下一個週期
+    }
+  }, 3000);
 }
 </script>
 </body>

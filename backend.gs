@@ -42,6 +42,8 @@ function doPost(e) {
         return getHistory(data);
       case 'uploadReceiptImage':
         return uploadReceiptImage(data);
+      case 'pollCode':
+        return pollCode(data);
       default:
         return jsonResponse({ status: 'error', message: '未知動作: ' + action }, 400);
     }
@@ -573,13 +575,8 @@ function redeemReceipt(data) {
   });
 }
 
-// 9. 上傳收據圖片到 Google Drive
+// 9. 上傳收據圖片到 Google Drive（社員領收據時自動留存，用 code 驗證）
 function uploadReceiptImage(data) {
-  const staff = validateStaff(data.staffPassword);
-  if (!staff) {
-    return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
-  }
-
   const record = findRecordByCode(data.code);
   if (!record) {
     return jsonResponse({ status: 'error', message: '找不到該筆繳費紀錄' }, 404);
@@ -589,10 +586,8 @@ function uploadReceiptImage(data) {
   const blob = Utilities.newBlob(Utilities.base64Decode(base64), 'image/png', `receipt_${data.code}.png`);
 
   // 在 Drive 根目錄建立/找到 "師大影像社 收據" 資料夾
-  let folder = DriveApp.getFoldersByName('師大影像社 收據').next();
-  if (!folder) {
-    folder = DriveApp.createFolder('師大影像社 收據');
-  }
+  const folders = DriveApp.getFoldersByName('師大影像社 收據');
+  const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder('師大影像社 收據');
 
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -615,6 +610,44 @@ function getHistory(data) {
 
   const history = getMemberHistory(phoneLast4(member.phone));
   return jsonResponse({ status: 'ok', history: history });
+}
+
+// 10. 社員端輪詢：幹部確認收款後，查詢是否已有可領取的 code
+function pollCode(data) {
+  const course = getActiveCourse();
+  if (!course) {
+    return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
+  }
+
+  const member = findMemberByLast4(data.last4);
+  if (!member) {
+    return jsonResponse({ status: 'error', message: '找不到報名資料' }, 404);
+  }
+  if (data.name && !namesMatch(member.name, data.name)) {
+    return jsonResponse({ status: 'error', message: '姓名與末四碼不符' }, 404);
+  }
+
+  const last4 = phoneLast4(member.phone);
+  const sheet = getSheet(SHEET_NAMES.RECORDS);
+  const rows = sheet.getDataRange().getValues();
+
+  // 從最新往回找：末四碼相符 + 已繳費 + 有 code + 尚未過期
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][4]) === last4 && rows[i][8] === true && rows[i][9]) {
+      const ts = new Date(rows[i][0]);
+      const ageMin = (Date.now() - ts.getTime()) / 60000;
+      if (!isNaN(ageMin) && ageMin <= 30) {
+        return jsonResponse({
+          status: 'ok',
+          code: String(rows[i][9]),
+          name: rows[i][3],
+          fee: rows[i][7]
+        });
+      }
+    }
+  }
+
+  return jsonResponse({ status: 'ok', code: null });
 }
 
 // ============ 幹部驗證 ============
