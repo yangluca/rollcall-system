@@ -94,11 +94,11 @@
   <h3>現場：幹部收款</h3>
   <div class="step"><div class="badge">3</div><div class="txt">幹部開 <b>admin.html</b>，輸入<b>幹部密碼</b> + 社員<b>電話末四碼</b> → 點「定位社員」。</div></div>
   <div class="step"><div class="badge">4</div><div class="txt">畫面顯示社員<b>姓名、身分、應繳金額</b>。確認無誤後<b>收現金</b>。</div></div>
-  <div class="step"><div class="badge">5</div><div class="txt">點「<b>確認已收現金</b>」→ 螢幕出現一個 <b>8 位數密碼</b>。</div></div>
-  <div class="step"><div class="badge">6</div><div class="txt"><b>口頭報這 8 位密碼</b>給社員。</div></div>
+  <div class="step"><div class="badge">5</div><div class="txt">點「<b>確認已收現金</b>」→ 螢幕出現一個 <b>6 位數密碼</b>。</div></div>
+  <div class="step"><div class="badge">6</div><div class="txt"><b>口頭報這 6 位密碼</b>給社員。</div></div>
 
   <h3>現場：社員領收據</h3>
-  <div class="step"><div class="badge">7</div><div class="txt">社員開 <b>receipt.html</b>，輸入 8 位密碼 → 領取 3D 電子收據 → 可下載圖片存檔。</div></div>
+  <div class="step"><div class="badge">7</div><div class="txt">社員開 <b>receipt.html</b>，輸入 6 位密碼 → 領取 3D 電子收據 → 可下載圖片存檔。</div></div>
 
   <div class="callout"><b>沒帶手機的社員？</b> 用 admin.html 切到「<b>手動代簽</b>」分頁，填姓名、末四碼、身分、類型即可代簽到，同樣收現金後產生密碼。</div>
 
@@ -154,7 +154,7 @@
   <div class="card">
     <p><b>Q：定位社員時顯示「找不到報名資料」？</b><br>表示該末四碼還沒在 members 名單。請先用「手動代簽」補資料，或請社員重新報名。</p>
     <p><b>Q：社員說「今天沒有開放簽到的社課」？</b><br>檢查 courses 分頁：今天的課程有沒有填、active 是不是 <code>TRUE</code>、日期是不是今天。</p>
-    <p><b>Q：密碼報給社員後，他領不到收據？</b><br>密碼是一次性的，用過就失效。確認社員輸入的 8 位數完全一致（不要看錯 0/O、1/I）。</p>
+    <p><b>Q：密碼報給社員後，他領不到收據？</b><br>密碼是一次性的，用過就失效。確認社員輸入的 6 位數完全一致（不要看錯 0/O、1/I）。</p>
     <p><b>Q：學期社員繳過費，但之後簽到還要他繳費？</b><br>檢查 members 分頁他的 <code>paidSemester</code> 是不是 <code>TRUE</code>，以及 <code>memberType</code> 是不是 <code>semester</code>。</p>
     <p><b>Q：要寄收據給沒帶手機的社員？</b><br>收據圖片會寫進 records 分頁，含姓名與金額。幹部從 members 找到該社員 Email，手動把收據寄出即可。</p>
   </div>
