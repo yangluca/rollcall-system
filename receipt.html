@@ -77,7 +77,7 @@
 
   <div class="actions" id="actions" style="display:none;">
     <button class="btn secondary" id="btnDownload">下載圖片</button>
-    <button class="btn secondary" id="btnReset">領取下一张</button>
+    <button class="btn secondary" id="btnReset">領取下一張</button>
   </div>
 
   <footer>師大影像藝術創作社 · 點名繳費收據系統</footer>
@@ -233,7 +233,12 @@ async function renderReceiptCanvas(receipt) {
   canvas.width = img.naturalWidth;
   canvas.height = img.naturalHeight;
   const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
   ctx.drawImage(img, 0, 0);
+
+  // 給收據邊緣加紙質毛邊（在底圖之上、文字之下）
+  drawPaperEdge(ctx, W, H, { bleed: 14, teeth: 100, variance: 7, color: '#e6e1d8' });
 
   // 載入字體
   await document.fonts.load("47px 'ChenYuluoyan'");
@@ -243,7 +248,6 @@ async function renderReceiptCanvas(receipt) {
   ctx.font = "47px 'ChenYuluoyan', 'PingFang TC', sans-serif";
   ctx.textBaseline = 'top';
 
-  const W = canvas.width, H = canvas.height;
   const date = new Date(receipt.courseDate);
   const rocYear = date.getFullYear() - 1911;
   const month = date.getMonth() + 1;
@@ -296,6 +300,53 @@ async function drawStamp(ctx, x, y, size) {
     };
     stamp.onerror = () => resolve();
   });
+}
+
+// 畫紙質毛邊：沿著收據四邊不規則鋰齒
+function drawPaperEdge(ctx, W, H, opts) {
+  const bleed = opts.bleed || 12;
+  const teeth = opts.teeth || 90;
+  const variance = opts.variance || 6;
+  const color = opts.color || '#e6e1d8';
+
+  function jaggedLine(x1, y1, x2, y2, n) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    const dx = (x2 - x1) / n;
+    const dy = (y2 - y1) / n;
+    for (let i = 1; i <= n; i++) {
+      const px = x1 + dx * i;
+      const py = y1 + dy * i;
+      const jitter = (Math.random() - 0.5) * variance;
+      const nx = px + jitter * (y2 - y1) / Math.hypot(x2 - x1, y2 - y1);
+      const ny = py - jitter * (x2 - x1) / Math.hypot(x2 - x1, y2 - y1);
+      ctx.lineTo(nx, ny);
+    }
+    return { x: x2, y: y2 };
+  }
+
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // 用兩次不同種子的鋰齒線模擬隨機撕裂
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.beginPath();
+    jaggedLine(-bleed, -bleed, W + bleed, -bleed, teeth);
+    jaggedLine(W + bleed, -bleed, W + bleed, H + bleed, teeth);
+    jaggedLine(W + bleed, H + bleed, -bleed, H + bleed, teeth);
+    jaggedLine(-bleed, H + bleed, -bleed, -bleed, teeth);
+    ctx.closePath();
+
+    // 裁切：只保留外框舊圖外的部分
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
 // 從簽到頁帶 code 過來（receipt.html?code=XXXXXX）：自動填入並直接領取
