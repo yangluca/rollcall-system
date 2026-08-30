@@ -611,3 +611,39 @@ function validateStaff(password) {
   }
   return null;
 }
+
+// ============ Google 表單報名 → 自動搬運到 members ============
+// 當社員提交報名表單（Google Forms）時，自動把回覆寫進 members 分頁。
+// 需在 Apps Script 設定「可安裝觸發器」：onFormSubmit / 事件來源=試算表 / 事件=表單提交。
+//
+// Forms 題目必須照此順序（回覆第 1 欄是時間戳記，自動帶入）：
+//   題1 = 姓名、題2 = 電話、題3 = Email、題4 = 身分、題5 = 報名類型
+function onFormSubmit(e) {
+  const values = e.values || [];
+  const member = {
+    name: String(values[1] || '').trim(),
+    phone: String(values[2] || '').trim(),
+    email: String(values[3] || '').trim(),
+    identity: mapIdentity(values[4]),
+    memberType: mapMemberType(values[5])
+  };
+
+  // 姓名或電話缺一就不寫入（避免空資料污染名單）
+  if (!member.name || !member.phone) return;
+
+  upsertMember(member);
+}
+
+// 身分選項文字 → 系統代碼（student / public）
+function mapIdentity(v) {
+  const s = String(v || '').trim();
+  if (s.indexOf('社會') !== -1 || s.toLowerCase() === 'public') return 'public';
+  return 'student';
+}
+
+// 報名類型選項文字 → 系統代碼（single / semester）
+function mapMemberType(v) {
+  const s = String(v || '').trim();
+  if (s.indexOf('學期') !== -1 || s.toLowerCase() === 'semester') return 'semester';
+  return 'single';
+}
