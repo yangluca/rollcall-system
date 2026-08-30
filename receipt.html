@@ -26,17 +26,17 @@
   .btn{width:100%; padding:16px; font-size:17px; font-weight:600; border:none; border-radius:12px; background:var(--fg); color:#fff; cursor:pointer; margin-top:12px; transition:transform .1s, opacity .15s;}
   .btn:active{transform:scale(.98);}
   .btn:disabled{opacity:.5; cursor:not-allowed;}
-  .receipt-stage{perspective:1200px; margin:20px 0; display:none; overflow:visible;}
+  .receipt-stage{perspective:1200px; margin:20px 0; display:none;}
   .receipt-stage.show{display:block;}
-  .receipt-wrap{width:100%; max-width:360px; margin:0 auto; transform-style:preserve-3d; transition:transform .1s; cursor:grab; overflow:visible; padding:40px;}
+  .receipt-wrap{width:100%; max-width:360px; margin:0 auto; transform-style:preserve-3d; transition:transform .1s; cursor:grab;}
   .receipt-wrap:active{cursor:grabbing;}
   .receipt-wrap.idle{animation:idleSpin 5s ease-in-out infinite;}
   @keyframes idleSpin{
     0%,100%{transform:rotateX(6deg) rotateY(-15.6deg);}
     50%{transform:rotateX(-3.6deg) rotateY(15.6deg);}
   }
-  .receipt{position:relative; width:100%; overflow:visible; box-shadow:0 12px 40px rgba(0,0,0,.18); background:#fff;}
-  .receipt canvas{width:100%; display:block;}
+  .receipt{position:relative; width:100%; border-radius:8px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.18); background:#fff;}
+  .receipt canvas{width:100%; display:block; border-radius:8px;}
   .actions{display:flex; gap:10px; margin-top:16px;}
   .actions .btn{flex:1; margin-top:0;}
   .result{display:none;}
@@ -70,14 +70,14 @@
   <div class="receipt-stage" id="receiptStage">
     <div class="receipt-wrap idle" id="receiptWrap">
       <div class="receipt" id="receipt">
-        <canvas id="receiptCanvas" style="width:100%;display:block;"></canvas>
+        <canvas id="receiptCanvas" style="width:100%;display:block;border-radius:8px;"></canvas>
       </div>
     </div>
   </div>
 
   <div class="actions" id="actions" style="display:none;">
     <button class="btn secondary" id="btnDownload">下載圖片</button>
-    <button class="btn secondary" id="btnReset">領取下一張</button>
+    <button class="btn secondary" id="btnReset">領取下一张</button>
   </div>
 
   <footer>師大影像藝術創作社 · 點名繳費收據系統</footer>
@@ -158,7 +158,7 @@ function showReceipt(receipt) {
     canvas.id = 'receiptCanvas';
     canvas.style.width = '100%';
     canvas.style.display = 'block';
-    canvas.style.borderRadius = '0';
+    canvas.style.borderRadius = '8px';
 
     // 收據紀錄留存：把生成的收據圖片上傳到後端 Drive（fire-and-forget，失敗不影響顯示）
     if (receipt.code) {
@@ -233,14 +233,7 @@ async function renderReceiptCanvas(receipt) {
   canvas.width = img.naturalWidth;
   canvas.height = img.naturalHeight;
   const ctx = canvas.getContext('2d');
-
-  // 保留原圖完整邊界，不裁切
   ctx.drawImage(img, 0, 0);
-
-  const W = canvas.width, H = canvas.height;
-
-  // 給收據邊緣加紙質毛邊（在底圖之上、文字之下）
-  drawPaperEdge(ctx, W, H, { density: 160, depth: 16, color: 'rgba(45,45,45,0.75)' });
 
   // 載入字體
   await document.fonts.load("47px 'ChenYuluoyan'");
@@ -250,6 +243,7 @@ async function renderReceiptCanvas(receipt) {
   ctx.font = "47px 'ChenYuluoyan', 'PingFang TC', sans-serif";
   ctx.textBaseline = 'top';
 
+  const W = canvas.width, H = canvas.height;
   const date = new Date(receipt.courseDate);
   const rocYear = date.getFullYear() - 1911;
   const month = date.getMonth() + 1;
@@ -302,56 +296,6 @@ async function drawStamp(ctx, x, y, size) {
     };
     stamp.onerror = () => resolve();
   });
-}
-
-// 畫紙質毛邊：沿著收據四邊不規則鋰齒
-function drawPaperEdge(ctx, W, H, opts) {
-  const density = opts.density || 160;
-  const depth = opts.depth || 14;
-  const color = opts.color || 'rgba(45,45,45,0.75)';
-
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-
-  // 在四邊畫出不規則紙精毛邊
-  const sides = [
-    { from: [0, 0], to: [W, 0], normal: [0, -1] },
-    { from: [W, 0], to: [W, H], normal: [1, 0] },
-    { from: [W, H], to: [0, H], normal: [0, 1] },
-    { from: [0, H], to: [0, 0], normal: [-1, 0] }
-  ];
-
-  for (const side of sides) {
-    const [x1, y1] = side.from;
-    const [x2, y2] = side.to;
-    const [nx, ny] = side.normal;
-
-    for (let i = 0; i < density; i++) {
-      const t = i / density;
-      const x = x1 + (x2 - x1) * t;
-      const y = y1 + (y2 - y1) * t;
-      const d = depth * (0.5 + Math.random() * 0.8);
-      const wiggle = (Math.random() - 0.5) * depth * 0.6;
-
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + nx * d + (ny === 0 ? 0 : wiggle), y + ny * d + (nx === 0 ? 0 : wiggle));
-      ctx.stroke();
-
-      // 再加一些小粒點增加紙精感
-      if (Math.random() > 0.4) {
-        ctx.beginPath();
-        const px = x + nx * d * 0.5 + (Math.random() - 0.5) * depth;
-        const py = y + ny * d * 0.5 + (Math.random() - 0.5) * depth;
-        ctx.arc(px, py, 0.6 + Math.random(), 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-
-  ctx.restore();
 }
 
 // 從簽到頁帶 code 過來（receipt.html?code=XXXXXX）：自動填入並直接領取
