@@ -633,7 +633,8 @@ function pollCode(data) {
 
   // 從最新往回找：末四碼相符 + 已繳費 + 有 code + 尚未過期
   for (let i = rows.length - 1; i >= 1; i--) {
-    if (String(rows[i][4]) === last4 && rows[i][8] === true && rows[i][9]) {
+    const paid = rows[i][8] === true || rows[i][8] === 'TRUE' || rows[i][8] === 'true';
+    if (String(rows[i][4]) === last4 && paid && rows[i][9]) {
       const ts = new Date(rows[i][0]);
       const ageMin = (Date.now() - ts.getTime()) / 60000;
       if (!isNaN(ageMin) && ageMin <= 30) {

@@ -235,7 +235,13 @@ function startPolling(name, last4) {
         }
       }
     } catch (e) {
-      // 輪詢偶發失敗（如暫時斷網），繼續等下一個週期
+      // 顯示錯誤，方便定位問題（也讓使用者知道出狀況了）
+      const el = $('pollStatus');
+      if (el) {
+        el.innerHTML = '繳費完成後，畫面會自動出現領取密碼…<br>' +
+          '<span style="color:#cf222e;font-size:12px;margin-top:6px;display:inline-block;">' +
+          '（偵測到錯誤：' + (e.message || '連線失敗') + '）</span>';
+      }
     }
   }, 3000);
 }
