@@ -359,8 +359,11 @@ function drawPaperEdge(ctx, W, H, opts) {
   }
   ctx.closePath();
 
-  // 填充毛邊輪廓
-  ctx.fill();
+  // 加上內部矩形（使用 evenodd fill rule 只填充外圍毛邊，不蓋住底圖）
+  ctx.rect(0, 0, W, H);
+
+  // 填充毛邊輪廓（evenodd）
+  ctx.fill('evenodd');
 
   ctx.restore();
 }
