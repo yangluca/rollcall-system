@@ -35,8 +35,8 @@
     0%,100%{transform:rotateX(6deg) rotateY(-15.6deg);}
     50%{transform:rotateX(-3.6deg) rotateY(15.6deg);}
   }
-  .receipt{position:relative; width:100%; border-radius:8px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.18); background:#fff;}
-  .receipt canvas{width:100%; display:block; border-radius:8px;}
+  .receipt{position:relative; width:100%; overflow:visible; box-shadow:0 12px 40px rgba(0,0,0,.18); background:#fff;}
+  .receipt canvas{width:100%; display:block;}
   .actions{display:flex; gap:10px; margin-top:16px;}
   .actions .btn{flex:1; margin-top:0;}
   .result{display:none;}
@@ -70,7 +70,7 @@
   <div class="receipt-stage" id="receiptStage">
     <div class="receipt-wrap idle" id="receiptWrap">
       <div class="receipt" id="receipt">
-        <canvas id="receiptCanvas" style="width:100%;display:block;border-radius:8px;"></canvas>
+        <canvas id="receiptCanvas" style="width:100%;display:block;"></canvas>
       </div>
     </div>
   </div>
@@ -158,7 +158,7 @@ function showReceipt(receipt) {
     canvas.id = 'receiptCanvas';
     canvas.style.width = '100%';
     canvas.style.display = 'block';
-    canvas.style.borderRadius = '8px';
+    canvas.style.borderRadius = '0';
 
     // 收據紀錄留存：把生成的收據圖片上傳到後端 Drive（fire-and-forget，失敗不影響顯示）
     if (receipt.code) {
@@ -304,47 +304,63 @@ async function drawStamp(ctx, x, y, size) {
 
 // 畫紙質毛邊：沿著收據四邊不規則鋰齒
 function drawPaperEdge(ctx, W, H, opts) {
-  const bleed = opts.bleed || 12;
-  const teeth = opts.teeth || 90;
-  const variance = opts.variance || 6;
-  const color = opts.color || '#e6e1d8';
+  const bleed = opts.bleed || 14;
+  const teeth = opts.teeth || 100;
+  const variance = opts.variance || 7;
+  const color = opts.color || 'rgba(90,82,68,0.35)';
 
-  function jaggedLine(x1, y1, x2, y2, n) {
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    const dx = (x2 - x1) / n;
-    const dy = (y2 - y1) / n;
-    for (let i = 1; i <= n; i++) {
-      const px = x1 + dx * i;
-      const py = y1 + dy * i;
-      const jitter = (Math.random() - 0.5) * variance;
-      const nx = px + jitter * (y2 - y1) / Math.hypot(x2 - x1, y2 - y1);
-      const ny = py - jitter * (x2 - x1) / Math.hypot(x2 - x1, y2 - y1);
-      ctx.lineTo(nx, ny);
-    }
-    return { x: x2, y: y2 };
+  function noisyPoint(x, y, nx, ny, t) {
+    // (nx, ny) 為邊緣法線方向，用來將搖動限制在垂直於邊的方向
+    const len = Math.hypot(nx, ny) || 1;
+    const ux = nx / len, uy = ny / len;
+    const jitter = (Math.random() - 0.5) * variance * (0.6 + Math.random() * 0.8);
+    return { x: x + ux * jitter, y: y + uy * jitter };
   }
 
   ctx.save();
-  ctx.fillStyle = color;
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.2;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
-  // 用兩次不同種子的鋰齒線模擬隨機撕裂
-  for (let pass = 0; pass < 2; pass++) {
-    ctx.beginPath();
-    jaggedLine(-bleed, -bleed, W + bleed, -bleed, teeth);
-    jaggedLine(W + bleed, -bleed, W + bleed, H + bleed, teeth);
-    jaggedLine(W + bleed, H + bleed, -bleed, H + bleed, teeth);
-    jaggedLine(-bleed, H + bleed, -bleed, -bleed, teeth);
-    ctx.closePath();
+  // 畫出毛邊輪廓（在底圖之上）
+  ctx.beginPath();
+  let pts = [];
 
-    // 裁切：只保留外框舊圖外的部分
-    ctx.globalCompositeOperation = 'destination-over';
-    ctx.fill();
+  // 上邊
+  for (let i = 0; i <= teeth; i++) {
+    const t = i / teeth;
+    const p = noisyPoint(-bleed + (W + bleed * 2) * t, -bleed, 0, -1, t);
+    pts.push(p);
   }
+  // 右邊
+  for (let i = 0; i <= teeth; i++) {
+    const t = i / teeth;
+    const p = noisyPoint(W + bleed, -bleed + (H + bleed * 2) * t, 1, 0, t);
+    pts.push(p);
+  }
+  // 下邊
+  for (let i = 0; i <= teeth; i++) {
+    const t = i / teeth;
+    const p = noisyPoint(W + bleed - (W + bleed * 2) * t, H + bleed, 0, 1, t);
+    pts.push(p);
+  }
+  // 左邊
+  for (let i = 0; i <= teeth; i++) {
+    const t = i / teeth;
+    const p = noisyPoint(-bleed, H + bleed - (H + bleed * 2) * t, -1, 0, t);
+    pts.push(p);
+  }
+
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) {
+    ctx.lineTo(pts[i].x, pts[i].y);
+  }
+  ctx.closePath();
+
+  // 填充毛邊輪廓
+  ctx.fill();
 
   ctx.restore();
 }
