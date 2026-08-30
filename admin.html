@@ -59,7 +59,7 @@
 
   <div class="card">
     <label for="staffPassword">幹部密碼</label>
-    <input type="password" id="staffPassword" placeholder="0000" maxlength="10" inputmode="numeric">
+    <input type="password" id="staffPassword" placeholder="至少 6 位，可含字母" maxlength="20" inputmode="text">
 
     <div class="mode-tabs" style="margin-top:16px;">
       <div class="mode-tab active" data-mode="locate">定位收款</div>
@@ -223,7 +223,7 @@ function renderConfirmResult(data) {
     </div>
     <div class="code-box">
       <div class="code">${data.code}</div>
-      <div class="hint">請口頭告知社員此 6 位密碼</div>
+      <div class="hint">請口頭告知社員此 8 位密碼</div>
     </div>
     <button class="btn secondary" onclick="resetAll()">下一筆</button>
   `;

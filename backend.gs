@@ -146,8 +146,14 @@ function phoneLast4(phone) {
   return s.slice(-4);
 }
 
+// 姓名比對：去空白、轉小寫後比較（防末四碼被遍歷時需同時知道姓名）
+function namesMatch(a, b) {
+  const norm = s => String(s || '').trim().toLowerCase().replace(/[\s\u3000]+/g, '');
+  return norm(a) === norm(b) && norm(a) !== '';
+}
+
 function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return Math.floor(10000000 + Math.random() * 90000000).toString();
 }
 
 function findMemberByPhone(phone) {
@@ -376,6 +382,11 @@ function checkin(data) {
     return jsonResponse({ status: 'error', message: '找不到報名資料，請先填寫報名表單' }, 404);
   }
 
+  // 姓名雙重驗證：末四碼之外，還需姓名相符（防末四碼被暴力遍歷洩漏個資）
+  if (data.name && !namesMatch(member.name, data.name)) {
+    return jsonResponse({ status: 'error', message: '姓名與末四碼不符，請確認報名資料' }, 404);
+  }
+
   const feeInfo = calculateFee(member, course);
 
   // 若需繳費，不寫入紀錄（等幹部收款後才寫）
@@ -443,7 +454,7 @@ function manualCheckin(data) {
     });
   }
 
-  return checkin({ phone: data.phone });
+  return checkin({ name: data.name, last4: phoneLast4(data.phone) });
 }
 
 // 5. 幹部用末四碼定位社員
@@ -541,6 +552,13 @@ function redeemReceipt(data) {
     return jsonResponse({ status: 'error', message: '此密碼尚未完成繳費' }, 400);
   }
 
+  // 限時：收款後 30 分鐘內有效，超過請洽幹部重開
+  const ts = new Date(record.timestamp);
+  const ageMin = (Date.now() - ts.getTime()) / 60000;
+  if (isNaN(ageMin) || ageMin > 30) {
+    return jsonResponse({ status: 'error', message: '此收據密碼已過期，請洽幹部' }, 410);
+  }
+
   return jsonResponse({
     status: 'ok',
     receipt: {
@@ -601,13 +619,31 @@ function getHistory(data) {
 
 // ============ 幹部驗證 ============
 function validateStaff(password) {
+  const cache = CacheService.getScriptCache();
+
+  // 已被鎖定（暴力破解防護）：直接拒絕
+  if (cache.get('staff_locked') === '1') {
+    return null;
+  }
+
   const sheet = getSheet(SHEET_NAMES.STAFF);
   const rows = sheet.getDataRange().getValues();
 
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][1]) === String(password)) {
+      // 驗證成功，清除失敗計數
+      cache.remove('staff_fail');
       return { name: rows[i][0] };
     }
+  }
+
+  // 驗證失敗：累加計數，連續 5 次鎖定 10 分鐘
+  const fail = parseInt(cache.get('staff_fail') || '0', 10) + 1;
+  if (fail >= 5) {
+    cache.put('staff_locked', '1', 600); // 鎖定 10 分鐘
+    cache.remove('staff_fail');
+  } else {
+    cache.put('staff_fail', String(fail), 600);
   }
   return null;
 }

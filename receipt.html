@@ -54,12 +54,12 @@
 <div class="wrap">
   <header>
     <h1>領取電子收據</h1>
-    <div class="subtitle">輸入幹部提供的 6 位密碼</div>
+    <div class="subtitle">輸入幹部提供的 8 位密碼</div>
   </header>
 
   <div class="card" id="formCard">
-    <label for="code">6 位收據密碼</label>
-    <input type="tel" id="code" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}">
+    <label for="code">8 位收據密碼</label>
+    <input type="tel" id="code" placeholder="00000000" maxlength="8" inputmode="numeric" pattern="[0-9]{8}">
     <button class="btn" id="btnRedeem">領取收據</button>
   </div>
 
@@ -123,8 +123,8 @@ function pad2(n) {
 
 $('btnRedeem').addEventListener('click', async () => {
   const code = $('code').value.trim();
-  if (!/^\d{6}$/.test(code)) {
-    showResult('err', '請輸入 6 位數密碼');
+  if (!/^\d{8}$/.test(code)) {
+    showResult('err', '請輸入 8 位數密碼');
     return;
   }
 
