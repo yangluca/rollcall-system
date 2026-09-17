@@ -755,8 +755,8 @@ function validateStaff(password) {
 //        --syncMembers 解析--> members 正式記錄（判斷身分/堂次、去重）
 //
 // 「報名同步」分頁欄位順序（第 1 列為標題，程式跳過）：
-//   [0] 姓名  [1] 電話  [2] email  [3] 學校科系  [4] 方案  [5] 單堂選擇
-// 對應表單回覆表欄位：姓名=C、電話=E、email=D、學校科系=G、方案=H、單堂選擇=K
+//   [0] 姓名  [1] 電話  [2] email  [3] 方案  [4] 單堂選擇
+// 對應表單回覆表欄位：姓名=C、電話=E、email=D、方案=H、單堂選擇=K
 function syncMembers() {
   const sheet = getSheet(SHEET_NAMES.SYNC);
   if (!sheet) {
@@ -771,11 +771,10 @@ function syncMembers() {
     if (!name || !phone) continue;
 
     const email = String(rows[i][2] || '').trim();
-    const school = String(rows[i][3] || '').trim();
-    const planText = String(rows[i][4] || '').trim();
-    const enrollText = String(rows[i][5] || '').trim();
+    const planText = String(rows[i][3] || '').trim();
+    const enrollText = String(rows[i][4] || '').trim();
 
-    const plan = parsePlan(planText, school);
+    const plan = parsePlan(planText);
     const enrolled = parseEnrolledDates(enrollText);
 
     const result = upsertMember({
@@ -801,8 +800,8 @@ function onFormSubmit() {
 // 選項：
 //   「學生身分、單堂社員：$250 / 堂」 → single + student
 //   「社會人士、單堂社員：$450 / 堂」 → single + public
-//   「學生 $1800；社會人士 $3500」      → semester（身分從學校科系欄判斷）
-function parsePlan(planText, schoolText) {
+//   「學生 $1800；社會人士 $3500」      → semester（身分不自動判斷，預設學生；幹部人工驗證後在 members 手動改 identity）
+function parsePlan(planText) {
   const s = String(planText || '').trim();
   if (s.indexOf('單堂') !== -1) {
     return {
@@ -810,15 +809,8 @@ function parsePlan(planText, schoolText) {
       identity: s.indexOf('社會') !== -1 ? 'public' : 'student'
     };
   }
-  // 學期：身分從「學校科系」欄判斷（幹部可事後在 members 人工修正 identity 欄）
   return {
     memberType: 'semester',
-    identity: inferSemesterIdentity(schoolText)
+    identity: 'student'
   };
-}
-
-// 學期社員身分：學校科系欄含「社會」→ 社會人士，否則預設學生
-function inferSemesterIdentity(schoolText) {
-  const s = String(schoolText || '').trim();
-  return s.indexOf('社會') !== -1 ? 'public' : 'student';
 }
