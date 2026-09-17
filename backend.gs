@@ -10,7 +10,8 @@ const SHEET_NAMES = {
   COURSES: 'courses',
   FEES: 'fees',
   STAFF: 'staff',
-  RECORDS: 'records'
+  RECORDS: 'records',
+  SYNC: '報名同步'
 };
 
 // ============ Web App 入口 ============
@@ -173,7 +174,8 @@ function findMemberByPhone(phone) {
         email: rows[i][2],
         identity: rows[i][3] || 'student',
         memberType: rows[i][4] || 'single',
-        paidSemester: rows[i][5] === true || rows[i][5] === 'TRUE' || rows[i][5] === 'true'
+        paidSemester: rows[i][5] === true || rows[i][5] === 'TRUE' || rows[i][5] === 'true',
+        enrolledCourses: rows[i][6] || ''
       };
     }
   }
@@ -193,7 +195,8 @@ function findMemberByLast4(last4) {
         email: rows[i][2],
         identity: rows[i][3] || 'student',
         memberType: rows[i][4] || 'single',
-        paidSemester: rows[i][5] === true || rows[i][5] === 'TRUE' || rows[i][5] === 'true'
+        paidSemester: rows[i][5] === true || rows[i][5] === 'TRUE' || rows[i][5] === 'true',
+        enrolledCourses: rows[i][6] || ''
       };
     }
   }
@@ -212,7 +215,11 @@ function calculateFee(member, course) {
     const fee = member.identity === 'student' ? config.studentSemesterFee : config.publicSemesterFee;
     return { fee: fee, item: `${semester} 學期社費`, type: 'semester_first' };
   } else {
-    // 單堂社員
+    // 單堂社員：今天這堂課是否已繳過費？（跨堂獨立、同堂去重）
+    const todayKey = monthDayKey(course.date);
+    if (hasPaidSingleCourse(member.phone, todayKey)) {
+      return { fee: 0, item: course.receiptItem, type: 'single_paid' };
+    }
     const fee = member.identity === 'student' ? config.studentSingleFee : config.publicSingleFee;
     return { fee: fee, item: course.receiptItem, type: 'single' };
   }
@@ -224,12 +231,53 @@ function hasPaidSemester(phone, semester) {
 
   for (let i = 1; i < rows.length; i++) {
     if (phoneLast4(rows[i][4]) === phoneLast4(phone) && rows[i][6] === 'semester') {
-      // 有學期費繳費紀錄，再看品名是否同學年度
-      const item = String(rows[i][7] || '');
-      if (item.startsWith(semester)) return true;
+      // 有學期費繳費紀錄，再看「品名」([10]) 是否同學年度
+      const item = String(rows[i][10] || '');
+      if (item.indexOf(semester) !== -1) return true;
     }
   }
   return false;
+}
+
+// 單堂社員：判斷「今天這堂課」是否已繳費（用月/日比對，跨堂獨立、同堂去重）
+function hasPaidSingleCourse(phone, dateKey) {
+  const sheet = getSheet(SHEET_NAMES.RECORDS);
+  const rows = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < rows.length; i++) {
+    if (phoneLast4(rows[i][4]) === phoneLast4(phone) && rows[i][6] === 'single') {
+      const paid = rows[i][8] === true || rows[i][8] === 'TRUE' || rows[i][8] === 'true';
+      if (paid && monthDayKey(rows[i][1]) === dateKey) return true;
+    }
+  }
+  return false;
+}
+
+// 各種日期格式統一成「月/日」（無前導零），例如 10/8、12/3
+// 支援：「2026-10-08」（formatDate）、「10/08（四）｜…」（報名堂次）、Date 物件
+function monthDayKey(input) {
+  if (input instanceof Date) {
+    return `${input.getMonth() + 1}/${input.getDate()}`;
+  }
+  const s = String(input || '').trim();
+  let m = s.match(/(\d{1,2})\/(\d{1,2})/);
+  if (m) return `${parseInt(m[1])}/${parseInt(m[2])}`;
+  m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${parseInt(m[2])}/${parseInt(m[3])}`;
+  return s;
+}
+
+// 解析報名表「單堂選擇」欄（複選，逗號分隔），回傳「月/日」key 陣列
+function parseEnrolledDates(text) {
+  const s = String(text || '').trim();
+  if (!s) return [];
+  const keys = [];
+  const parts = s.split(/[,，]/);
+  for (const p of parts) {
+    const k = monthDayKey(p);
+    if (k && k.indexOf('/') !== -1) keys.push(k);
+  }
+  return keys;
 }
 
 function upsertMember(member) {
@@ -238,12 +286,13 @@ function upsertMember(member) {
 
   if (existing) {
     // 更新現有資料，但保留 paidSemester
-    sheet.getRange(existing.rowIndex, 1, 1, 5).setValues([[
+    sheet.getRange(existing.rowIndex, 1, 1, 6).setValues([[
       member.name,
       member.phone,
       member.email,
       member.identity,
-      member.memberType
+      member.memberType,
+      member.enrolledCourses || ''
     ]]);
     return { action: 'updated', rowIndex: existing.rowIndex };
   } else {
@@ -254,7 +303,8 @@ function upsertMember(member) {
       member.email,
       member.identity,
       member.memberType,
-      false
+      false,
+      member.enrolledCourses || ''
     ];
     sheet.appendRow(newRow);
     return { action: 'created' };
@@ -334,7 +384,8 @@ function submitForm(data) {
     phone: data.phone,
     email: data.email,
     identity: data.identity || 'student',
-    memberType: data.memberType || 'single'
+    memberType: data.memberType || 'single',
+    enrolledCourses: data.enrolledCourses || ''
   };
 
   const result = upsertMember(member);
@@ -699,38 +750,75 @@ function validateStaff(password) {
   return null;
 }
 
-// ============ Google 表單報名 → 自動搬運到 members ============
-// 當社員提交報名表單（Google Forms）時，自動把回覆寫進 members 分頁。
-// 需在 Apps Script 設定「可安裝觸發器」：onFormSubmit / 事件來源=試算表 / 事件=表單提交。
+// ============ 報名同步：從「報名同步」分頁解析寫入 members ============
+// 架構：表單回覆表（獨立） --IMPORTRANGE 拉特定欄--> 系統「報名同步」分頁
+//        --syncMembers 解析--> members 正式記錄（判斷身分/堂次、去重）
 //
-// Forms 題目必須照此順序（回覆第 1 欄是時間戳記，自動帶入）：
-//   題1 = 姓名、題2 = 電話、題3 = Email、題4 = 身分、題5 = 報名類型
-function onFormSubmit(e) {
-  const values = e.values || [];
-  const member = {
-    name: String(values[1] || '').trim(),
-    phone: String(values[2] || '').trim(),
-    email: String(values[3] || '').trim(),
-    identity: mapIdentity(values[4]),
-    memberType: mapMemberType(values[5])
+// 「報名同步」分頁欄位順序（第 1 列為標題，程式跳過）：
+//   [0] 姓名  [1] 電話  [2] email  [3] 學校科系  [4] 方案  [5] 單堂選擇
+// 對應表單回覆表欄位：姓名=C、電話=E、email=D、學校科系=G、方案=H、單堂選擇=K
+function syncMembers() {
+  const sheet = getSheet(SHEET_NAMES.SYNC);
+  if (!sheet) {
+    return jsonResponse({ status: 'error', message: '找不到「報名同步」分頁' }, 500);
+  }
+  const rows = sheet.getDataRange().getValues();
+  let created = 0, updated = 0;
+
+  for (let i = 1; i < rows.length; i++) {
+    const name = String(rows[i][0] || '').trim();
+    const phone = String(rows[i][1] || '').trim();
+    if (!name || !phone) continue;
+
+    const email = String(rows[i][2] || '').trim();
+    const school = String(rows[i][3] || '').trim();
+    const planText = String(rows[i][4] || '').trim();
+    const enrollText = String(rows[i][5] || '').trim();
+
+    const plan = parsePlan(planText, school);
+    const enrolled = parseEnrolledDates(enrollText);
+
+    const result = upsertMember({
+      name: name,
+      phone: phone,
+      email: email,
+      identity: plan.identity,
+      memberType: plan.memberType,
+      enrolledCourses: enrolled.join(',')
+    });
+    if (result.action === 'created') created++; else updated++;
+  }
+
+  return jsonResponse({ status: 'ok', synced: Math.max(0, rows.length - 1), created: created, updated: updated });
+}
+
+// 保留給舊的可安裝觸發器(onFormSubmit)相容入口：改為執行同步
+function onFormSubmit() {
+  return syncMembers();
+}
+
+// 解析報名表「方案」欄 → { memberType, identity }
+// 選項：
+//   「學生身分、單堂社員：$250 / 堂」 → single + student
+//   「社會人士、單堂社員：$450 / 堂」 → single + public
+//   「學生 $1800；社會人士 $3500」      → semester（身分從學校科系欄判斷）
+function parsePlan(planText, schoolText) {
+  const s = String(planText || '').trim();
+  if (s.indexOf('單堂') !== -1) {
+    return {
+      memberType: 'single',
+      identity: s.indexOf('社會') !== -1 ? 'public' : 'student'
+    };
+  }
+  // 學期：身分從「學校科系」欄判斷（幹部可事後在 members 人工修正 identity 欄）
+  return {
+    memberType: 'semester',
+    identity: inferSemesterIdentity(schoolText)
   };
-
-  // 姓名或電話缺一就不寫入（避免空資料污染名單）
-  if (!member.name || !member.phone) return;
-
-  upsertMember(member);
 }
 
-// 身分選項文字 → 系統代碼（student / public）
-function mapIdentity(v) {
-  const s = String(v || '').trim();
-  if (s.indexOf('社會') !== -1 || s.toLowerCase() === 'public') return 'public';
-  return 'student';
-}
-
-// 報名類型選項文字 → 系統代碼（single / semester）
-function mapMemberType(v) {
-  const s = String(v || '').trim();
-  if (s.indexOf('學期') !== -1 || s.toLowerCase() === 'semester') return 'semester';
-  return 'single';
+// 學期社員身分：學校科系欄含「社會」→ 社會人士，否則預設學生
+function inferSemesterIdentity(schoolText) {
+  const s = String(schoolText || '').trim();
+  return s.indexOf('社會') !== -1 ? 'public' : 'student';
 }
