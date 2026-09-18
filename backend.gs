@@ -285,15 +285,16 @@ function upsertMember(member) {
   const existing = findMemberByPhone(member.phone);
 
   if (existing) {
-    // 更新現有資料，但保留 paidSemester
-    sheet.getRange(existing.rowIndex, 1, 1, 6).setValues([[
+    // 更新姓名/電話/email/身分/類型（A~E），保留 paidSemester（F 欄）不動
+    sheet.getRange(existing.rowIndex, 1, 1, 5).setValues([[
       member.name,
       member.phone,
       member.email,
       member.identity,
-      member.memberType,
-      member.enrolledCourses || ''
+      member.memberType
     ]]);
+    // 更新報名堂次（G 欄）
+    sheet.getRange(existing.rowIndex, 7).setValue(member.enrolledCourses || '');
     return { action: 'updated', rowIndex: existing.rowIndex };
   } else {
     // 新增
@@ -309,6 +310,22 @@ function upsertMember(member) {
     sheet.appendRow(newRow);
     return { action: 'created' };
   }
+}
+
+// 一次性修復：先前 bug 把「報名堂次」誤寫進單堂社員的 paidSemester（F 欄），
+// 執行方式：Apps Script 編輯器 → 選 fixPaidSemesterColumn → 執行一次即可
+function fixPaidSemesterColumn() {
+  const sheet = getSheet(SHEET_NAMES.MEMBERS);
+  const rows = sheet.getDataRange().getValues();
+  let fixed = 0;
+  for (let i = 1; i < rows.length; i++) {
+    // 單堂社員不會有學期費標記：F 欄一律清為 false
+    if (rows[i][4] === 'single' && rows[i][5] !== false && rows[i][5] !== 'FALSE' && rows[i][5] !== 'false') {
+      sheet.getRange(i + 1, 6).setValue(false);
+      fixed++;
+    }
+  }
+  return jsonResponse({ status: 'ok', fixed: fixed });
 }
 
 function addRecord(record) {
