@@ -80,6 +80,9 @@
 // TODO: 更換成部署後的 GAS Web App URL
 const API_URL = 'https://script.google.com/macros/s/AKfycbyyCMJBLqtjN8rUH6i-IDOrmVyWPpTt99D1_zNDrCOwbbisi6jjlOhPEaIa6VPgV8fN/exec';
 
+// 現場臨時來的人：沒報名時引導到報名表單
+const SIGNUP_URL = 'https://forms.gle/xWzVMo8VaWkGaDZNA';
+
 const $ = id => document.getElementById(id);
 
 function formatMoney(n) {
@@ -129,23 +132,30 @@ $('btnCheckin').addEventListener('click', async () => {
     const data = await callAPI('checkin', { name, last4 });
     renderResult(data);
   } catch (err) {
-    showResult('err', err.message || '連線發生問題，請確認網路後再試');
+    const msg = err.message || '連線發生問題，請確認網路後再試';
+    showResult('err', msg, msg.indexOf('找不到報名資料') !== -1);
   } finally {
     $('btnCheckin').disabled = false;
   }
 });
 
-function showResult(type, message) {
+function showResult(type, message, withSignup) {
   const icon = type === 'ok' ? '✓' : type === 'pay' ? '$' : '✕';
   $('resultCard').classList.add('show');
-  $('resultContent').innerHTML = `
-    <div class="status ${type}"><span>${icon}</span>${message}</div>
-  `;
+  let html = `<div class="status ${type}"><span>${icon}</span>${message}</div>`;
+  if (withSignup) {
+    html += `
+      <div class="detail" style="margin-bottom:14px;">現場臨時來的嗎？<b>請先填寫報名表單</b>，填完就能馬上回來簽到。</div>
+      <a class="btn" href="${SIGNUP_URL}" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none;">填寫報名表單 →</a>
+    `;
+  }
+  $('resultContent').innerHTML = html;
 }
 
 function renderResult(data) {
   if (data.status === 'error') {
-    showResult('err', data.message);
+    const msg = String(data.message || '');
+    showResult('err', msg, msg.indexOf('找不到報名資料') !== -1);
     return;
   }
 
