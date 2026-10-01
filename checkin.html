@@ -89,30 +89,46 @@ function formatMoney(n) {
   return '$' + Number(n).toLocaleString('zh-TW');
 }
 
+// GAS Web App 的回應偶爾會整段失敗（回 Google 的錯誤頁而非 JSON），
+// 這是 Google 端重定向機制不穩，不是我們的資料問題 → 自動重試。
+// 注意：只有「網路錯誤 / 非 JSON 回應」才重試；業務錯誤（status:'error'）直接回報。
+function sleepMs(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 async function callAPI(action, payload) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ action, ...payload })
-  });
-  let text;
-  try {
-    text = await res.text();
-  } catch (e) {
-    throw new Error('無法讀取伺服器回應');
+  const maxTry = 3;
+  let lastErr = null;
+
+  for (let attempt = 1; attempt <= maxTry; attempt++) {
+    let text = null;
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action, ...payload })
+      });
+      text = await res.text();
+    } catch (e) {
+      lastErr = new Error('網路連線失敗，請確認網路後再試');
+      if (attempt < maxTry) { await sleepMs(700 * attempt); continue; }
+      throw lastErr;
+    }
+
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      // 非 JSON（GAS 間歇性錯誤頁）→ 重試
+      lastErr = new Error('伺服器忙線中，請稍候再試一次');
+      if (attempt < maxTry) { await sleepMs(700 * attempt); continue; }
+      throw lastErr;
+    }
+
+    if (json.status === 'error') {
+      throw new Error(json.message || '伺服器錯誤');
+    }
+    return json;
   }
-  // 嘗試解析 JSON
-  let json;
-  try {
-    json = JSON.parse(text);
-  } catch (e) {
-    // 回應不是 JSON（通常是 GAS 錯誤頁），把原始內容丟出讓使用者看到
-    throw new Error('伺服器回傳非預期內容：' + text.slice(0, 300));
-  }
-  if (json.status === 'error') {
-    throw new Error(json.message || '伺服器錯誤');
-  }
-  return json;
+  throw lastErr;
 }
 
 $('btnCheckin').addEventListener('click', async () => {
