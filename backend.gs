@@ -151,6 +151,13 @@ function phoneLast4(phone) {
   return s.slice(-4);
 }
 
+// Sheets 會把「看起來像數字」的字串自動轉成數字，導致電話開頭 0 消失
+// （0912345678 → 912345678）。寫入時加單引號前綴可強制存成文字（單引號不會顯示、讀取時也不含）。
+function asText(v) {
+  const s = String(v == null ? '' : v).trim();
+  return s === '' ? '' : "'" + s;
+}
+
 // 姓名比對：去空白、轉小寫後比較（防末四碼被遍歷時需同時知道姓名）
 function namesMatch(a, b) {
   const norm = s => String(s || '').trim().toLowerCase().replace(/[\s\u3000]+/g, '');
@@ -290,7 +297,7 @@ function upsertMember(member) {
     // 更新姓名/電話/email/身分/類型（A~E），保留 paidSemester（F 欄）不動
     sheet.getRange(existing.rowIndex, 1, 1, 5).setValues([[
       member.name,
-      member.phone,
+      asText(member.phone),
       member.email,
       member.identity,
       member.memberType
@@ -302,7 +309,7 @@ function upsertMember(member) {
     // 新增
     const newRow = [
       member.name,
-      member.phone,
+      asText(member.phone),
       member.email,
       member.identity,
       member.memberType,
@@ -337,7 +344,7 @@ function addRecord(record) {
     record.courseDate,
     record.courseName,
     record.name,
-    record.phoneLast4,
+    asText(record.phoneLast4),
     record.identity,
     record.memberType,
     record.fee,
@@ -866,11 +873,11 @@ function syncMembers() {
       if (hit) {
         // 更新：一次寫 7 欄，F 欄（paidSemester）沿用原值，不被覆蓋
         memberSheet.getRange(hit.rowIndex, 1, 1, 7).setValues([[
-          name, phone, email, plan.identity, plan.memberType, hit.paidSemester, enrolled
+          name, asText(phone), email, plan.identity, plan.memberType, hit.paidSemester, enrolled
         ]]);
         updated++;
       } else {
-        appends.push([name, phone, email, plan.identity, plan.memberType, false, enrolled]);
+        appends.push([name, asText(phone), email, plan.identity, plan.memberType, false, enrolled]);
       }
     } catch (e) {
       errors++;  // 逐筆防錯：單筆失敗不影響其他筆（不再全有全無）
