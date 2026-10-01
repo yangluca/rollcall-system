@@ -158,6 +158,13 @@ function asText(v) {
   return s === '' ? '' : "'" + s;
 }
 
+// 寬鬆的真值判斷（Sheets 讀回可能是 boolean / 'TRUE' / 1 / 'Y'）
+function isTrue(v) {
+  if (v === true || v === 1) return true;
+  const s = String(v == null ? '' : v).trim().toUpperCase();
+  return s === 'TRUE' || s === '1' || s === 'Y' || s === 'YES';
+}
+
 // 姓名比對：去空白、轉小寫後比較（防末四碼被遍歷時需同時知道姓名）
 function namesMatch(a, b) {
   const norm = s => String(s || '').trim().toLowerCase().replace(/[\s\u3000]+/g, '');
@@ -872,7 +879,13 @@ function syncMembers() {
   for (let i = 1; i < mRows.length; i++) {
     const l4 = phoneLast4(mRows[i][1]);
     if (l4 && !index[l4]) {
-      index[l4] = { rowIndex: i + 1, paidSemester: mRows[i][5], enrolledCourses: mRows[i][6] };
+      index[l4] = {
+        rowIndex: i + 1,
+        paidSemester: mRows[i][5],
+        enrolledCourses: mRows[i][6],
+        locked: isTrue(mRows[i][7]),                              // H 欄「手動鎖定」
+        cur: [mRows[i][0], mRows[i][1], mRows[i][2], mRows[i][3]] // 現值：姓名/電話/email/身分
+      };
     }
   }
 
@@ -900,8 +913,16 @@ function syncMembers() {
         const merged = plan.memberType === 'semester'
           ? ''   // 轉為學期社員：堂次清空（學期已涵蓋全部）
           : mergeEnrolled(hit.enrolledCourses, enrolled);
+
+        // 幹部在 members 按了「手動鎖定」（H 欄）時，保留他在 姓名/電話/email/身分
+        // 的修正，不讓表單原始值蓋回去；「會員類型」與「報名堂次」仍以表單為準。
+        const finalName  = hit.locked ? hit.cur[0] : name;
+        const finalPhone = hit.locked ? asText(hit.cur[1]) : asText(phone);
+        const finalEmail = hit.locked ? hit.cur[2] : email;
+        const finalIdent = hit.locked ? hit.cur[3] : plan.identity;
+
         memberSheet.getRange(hit.rowIndex, 1, 1, 7).setValues([[
-          name, asText(phone), email, plan.identity, plan.memberType, hit.paidSemester, merged
+          finalName, finalPhone, finalEmail, finalIdent, plan.memberType, hit.paidSemester, merged
         ]]);
         updated++;
       } else {
