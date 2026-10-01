@@ -289,6 +289,27 @@ function parseEnrolledDates(text) {
   return keys;
 }
 
+// 合併兩串「月/日」堂次：聯集、去重、按日期排序
+// 用途：同一個人再次填表單加報新堂次時，不能覆蓋掉先前已報名的堂次
+function mergeEnrolled(oldStr, newStr) {
+  const seen = {};
+  const add = s => {
+    String(s || '').split(/[,，]/).forEach(x => {
+      const k = x.trim();
+      if (k && k.indexOf('/') !== -1) seen[k] = true;
+    });
+  };
+  add(oldStr);
+  add(newStr);
+  const keys = Object.keys(seen);
+  keys.sort((a, b) => {
+    const pa = a.split('/').map(Number);
+    const pb = b.split('/').map(Number);
+    return (pa[0] * 100 + pa[1]) - (pb[0] * 100 + pb[1]);
+  });
+  return keys.join(',');
+}
+
 function upsertMember(member) {
   const sheet = getSheet(SHEET_NAMES.MEMBERS);
   const existing = findMemberByPhone(member.phone);
@@ -341,7 +362,7 @@ function addRecord(record) {
   const sheet = getSheet(SHEET_NAMES.RECORDS);
   sheet.appendRow([
     new Date(),
-    record.courseDate,
+    asText(record.courseDate),
     record.courseName,
     record.name,
     asText(record.phoneLast4),
@@ -850,7 +871,9 @@ function syncMembers() {
   const index = {};
   for (let i = 1; i < mRows.length; i++) {
     const l4 = phoneLast4(mRows[i][1]);
-    if (l4 && !index[l4]) index[l4] = { rowIndex: i + 1, paidSemester: mRows[i][5] };
+    if (l4 && !index[l4]) {
+      index[l4] = { rowIndex: i + 1, paidSemester: mRows[i][5], enrolledCourses: mRows[i][6] };
+    }
   }
 
   const appends = [];
@@ -871,9 +894,14 @@ function syncMembers() {
       const hit = index[phoneLast4(phone)];
 
       if (hit) {
-        // 更新：一次寫 7 欄，F 欄（paidSemester）沿用原值，不被覆蓋
+        // 更新：一次寫 7 欄。
+        // F 欄（paidSemester）沿用原值；G 欄（報名堂次）用「聯集」合併，
+        // 避免同一個人再次填表單加報新堂次時，覆蓋掉先前已報名的堂次。
+        const merged = plan.memberType === 'semester'
+          ? ''   // 轉為學期社員：堂次清空（學期已涵蓋全部）
+          : mergeEnrolled(hit.enrolledCourses, enrolled);
         memberSheet.getRange(hit.rowIndex, 1, 1, 7).setValues([[
-          name, asText(phone), email, plan.identity, plan.memberType, hit.paidSemester, enrolled
+          name, asText(phone), email, plan.identity, plan.memberType, hit.paidSemester, merged
         ]]);
         updated++;
       } else {
