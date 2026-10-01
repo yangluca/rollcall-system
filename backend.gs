@@ -45,6 +45,8 @@ function doPost(e) {
         return uploadReceiptImage(data);
       case 'pollCode':
         return pollCode(data);
+      case 'syncNow':
+        return syncNowAction(data);
       default:
         return jsonResponse({ status: 'error', message: '未知動作: ' + action }, 400);
     }
@@ -447,7 +449,11 @@ function checkin(data) {
     return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
   }
 
-  const member = findMemberByLast4(data.last4);
+  let member = findMemberByLast4(data.last4);
+  if (!member && tryAutoSync()) {
+    // 可能是剛填完報名表單的人 → 即時同步一次再查（現場臨時報名情境）
+    member = findMemberByLast4(data.last4);
+  }
   if (!member) {
     return jsonResponse({ status: 'error', message: '找不到報名資料，請先填寫報名表單' }, 404);
   }
@@ -767,45 +773,146 @@ function validateStaff(password) {
   return null;
 }
 
-// ============ 報名同步：從「報名同步」分頁解析寫入 members ============
-// 架構：表單回覆表（獨立） --IMPORTRANGE 拉特定欄--> 系統「報名同步」分頁
-//        --syncMembers 解析--> members 正式記錄（判斷身分/堂次、去重）
+// ============ 報名同步：直接讀「表單回覆表」寫入 members ============
+// 架構：表單回覆表（獨立試算表） --syncMembers 直讀--> members
 //
-// 「報名同步」分頁欄位順序（第 1 列為標題，程式跳過）：
-//   [0] 姓名  [1] 電話  [2] email  [3] 方案  [4] 單堂選擇
-// 對應表單回覆表欄位：姓名=C、電話=E、email=D、方案=H、單堂選擇=K
-function syncMembers() {
-  const sheet = getSheet(SHEET_NAMES.SYNC);
-  if (!sheet) {
-    return jsonResponse({ status: 'error', message: '找不到「報名同步」分頁' }, 500);
+// 為什麼不經過「報名同步」分頁：IMPORTRANGE 有數分鐘~數小時的快取延遲，
+// 撐不住「現場填表 → 馬上簽到」的流程。改成直讀原始回覆表，零延遲。
+// 欄位對應用「標題文字」尋找（不寫死索引），表單改版加欄位也不會錯位。
+const SIGNUP_SS_ID = '1Hk22NsecGx6SoW4YBn6b6QADBtZow9HaGwFHvnfunJk';
+const SIGNUP_SHEET_NAME = '表單回覆 1';
+
+// 在標題列中找欄位索引（patterns 任一命中；exclude 命中則跳過）
+function findColByHeader(headers, patterns, exclude) {
+  for (let i = 0; i < headers.length; i++) {
+    const h = String(headers[i] || '').trim();
+    if (!h) continue;
+    if (exclude && exclude.some(x => h.indexOf(x) !== -1)) continue;
+    if (patterns.some(p => h.indexOf(p) !== -1)) return i;
   }
+  return -1;
+}
+
+// 取得表單回覆分頁（名稱不對時，改找含「姓名 + 電話」標題的分頁）
+function getSignupSheet() {
+  const ss = SpreadsheetApp.openById(SIGNUP_SS_ID);
+  const named = ss.getSheetByName(SIGNUP_SHEET_NAME);
+  if (named) return named;
+  const sheets = ss.getSheets();
+  for (let i = 0; i < sheets.length; i++) {
+    const lastCol = sheets[i].getLastColumn();
+    if (lastCol < 5) continue;
+    const h = sheets[i].getRange(1, 1, 1, Math.min(lastCol, 25)).getValues()[0];
+    const hasName = h.some(c => String(c).indexOf('姓名') !== -1);
+    const hasPhone = h.some(c => String(c).indexOf('電話') !== -1);
+    if (hasName && hasPhone) return sheets[i];
+  }
+  return sheets[0] || null;
+}
+
+function syncMembers() {
+  const sheet = getSignupSheet();
+  if (!sheet) {
+    return jsonResponse({ status: 'error', message: '找不到表單回覆分頁' }, 500);
+  }
+
   const rows = sheet.getDataRange().getValues();
-  let created = 0, updated = 0;
+  if (rows.length < 2) {
+    return jsonResponse({ status: 'ok', total: 0, created: 0, updated: 0, skipped: 0, errors: 0 });
+  }
+
+  const headers = rows[0];
+  const col = {
+    name: findColByHeader(headers, ['姓名']),
+    phone: findColByHeader(headers, ['電話']),
+    email: findColByHeader(headers, ['電子郵件'], ['地址']),
+    plan: findColByHeader(headers, ['我想入社報名', '報名']),
+    enroll: findColByHeader(headers, ['可依需求自由選擇'])
+  };
+
+  if (col.name < 0 || col.phone < 0 || col.plan < 0) {
+    return jsonResponse({
+      status: 'error',
+      message: '表單欄位對應失敗（找不到 姓名/電話/方案 欄）。目前標題：' + headers.join('｜')
+    }, 500);
+  }
+
+  // 一次讀 members，建立「末四碼 → {rowIndex, paidSemester}」索引（避免逐筆重讀）
+  const memberSheet = getSheet(SHEET_NAMES.MEMBERS);
+  const mRows = memberSheet.getDataRange().getValues();
+  const index = {};
+  for (let i = 1; i < mRows.length; i++) {
+    const l4 = phoneLast4(mRows[i][1]);
+    if (l4 && !index[l4]) index[l4] = { rowIndex: i + 1, paidSemester: mRows[i][5] };
+  }
+
+  const appends = [];
+  let updated = 0, errors = 0, skipped = 0;
 
   for (let i = 1; i < rows.length; i++) {
-    const name = String(rows[i][0] || '').trim();
-    const phone = String(rows[i][1] || '').trim();
-    if (!name || !phone) continue;
+    try {
+      const name = String(rows[i][col.name] || '').trim();
+      const phone = String(rows[i][col.phone] || '').trim();
+      if (!name || !phone) { skipped++; continue; }
 
-    const email = String(rows[i][2] || '').trim();
-    const planText = String(rows[i][3] || '').trim();
-    const enrollText = String(rows[i][4] || '').trim();
+      const email = col.email >= 0 ? String(rows[i][col.email] || '').trim() : '';
+      const planText = String(rows[i][col.plan] || '').trim();
+      const enrollText = col.enroll >= 0 ? String(rows[i][col.enroll] || '').trim() : '';
 
-    const plan = parsePlan(planText);
-    const enrolled = parseEnrolledDates(enrollText);
+      const plan = parsePlan(planText);
+      const enrolled = parseEnrolledDates(enrollText).join(',');
+      const hit = index[phoneLast4(phone)];
 
-    const result = upsertMember({
-      name: name,
-      phone: phone,
-      email: email,
-      identity: plan.identity,
-      memberType: plan.memberType,
-      enrolledCourses: enrolled.join(',')
-    });
-    if (result.action === 'created') created++; else updated++;
+      if (hit) {
+        // 更新：一次寫 7 欄，F 欄（paidSemester）沿用原值，不被覆蓋
+        memberSheet.getRange(hit.rowIndex, 1, 1, 7).setValues([[
+          name, phone, email, plan.identity, plan.memberType, hit.paidSemester, enrolled
+        ]]);
+        updated++;
+      } else {
+        appends.push([name, phone, email, plan.identity, plan.memberType, false, enrolled]);
+      }
+    } catch (e) {
+      errors++;  // 逐筆防錯：單筆失敗不影響其他筆（不再全有全無）
+    }
   }
 
-  return jsonResponse({ status: 'ok', synced: Math.max(0, rows.length - 1), created: created, updated: updated });
+  let created = 0;
+  if (appends.length > 0) {
+    memberSheet.getRange(memberSheet.getLastRow() + 1, 1, appends.length, 7).setValues(appends);
+    created = appends.length;
+  }
+
+  return jsonResponse({
+    status: 'ok',
+    total: Math.max(0, rows.length - 1),
+    created: created,
+    updated: updated,
+    skipped: skipped,
+    errors: errors
+  });
+}
+
+// 即時同步（頻率限制 60 秒，避免被濫用）
+function tryAutoSync() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('auto_sync_lock')) return false;
+  cache.put('auto_sync_lock', '1', 60);
+  try {
+    syncMembers();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// 幹部手動觸發同步（課前拉一次最新名單）
+function syncNowAction(data) {
+  const staff = validateStaff(data.staffPassword);
+  if (!staff) {
+    return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
+  }
+  return syncMembers();
 }
 
 // 保留給舊的可安裝觸發器(onFormSubmit)相容入口：改為執行同步

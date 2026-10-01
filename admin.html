@@ -95,6 +95,14 @@
     <div id="resultContent"></div>
   </div>
 
+  <div class="card">
+    <label>報名名單同步</label>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5;">
+      從報名表單拉最新名單。社員現場填表後簽到時也會自動同步，這裡是課前手動拉一次用。
+    </div>
+    <button class="btn" id="btnSync" style="background:#fff;color:var(--fg);border:1.5px solid var(--line);">同步報名資料</button>
+  </div>
+
   <footer>師大影像藝術創作社 · 點名繳費收據系統</footer>
 </div>
 
@@ -264,6 +272,28 @@ $('btnManual').addEventListener('click', async () => {
     showResult('err', err.message || '連線發生問題');
   } finally {
     $('btnManual').disabled = false;
+  }
+});
+
+// 同步報名名單（從表單回覆表拉最新資料）
+$('btnSync').addEventListener('click', async () => {
+  const staffPassword = $('staffPassword').value.trim();
+  if (!staffPassword) {
+    showResult('err', '請先輸入幹部密碼');
+    return;
+  }
+  $('btnSync').disabled = true;
+  $('resultCard').classList.add('show');
+  $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>同步中...</div>';
+  try {
+    const data = await callAPI('syncNow', { staffPassword });
+    const parts = [`新增 ${data.created} 筆`, `更新 ${data.updated} 筆`];
+    if (data.errors) parts.push(`失敗 ${data.errors} 筆`);
+    showResult('ok', `同步完成：${parts.join('、')}。`);
+  } catch (err) {
+    showResult('err', err.message || '同步失敗');
+  } finally {
+    $('btnSync').disabled = false;
   }
 });
 
