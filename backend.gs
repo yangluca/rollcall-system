@@ -11,7 +11,8 @@ const SHEET_NAMES = {
   FEES: 'fees',
   STAFF: 'staff',
   RECORDS: 'records',
-  SYNC: '報名同步'
+  SYNC: '報名同步',
+  ATTENDANCE: 'attendance'
 };
 
 // ============ Web App 入口 ============
@@ -66,6 +67,17 @@ function jsonResponse(payload, statusCode) {
 function getSheet(name) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   return ss.getSheetByName(name);
+}
+
+// 取得分頁，不存在就自動建立（可帶標題列）
+function getOrCreateSheet(name, headers) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    if (headers && headers.length) sheet.appendRow(headers);
+  }
+  return sheet;
 }
 
 function getConfig() {
@@ -383,6 +395,36 @@ function addRecord(record) {
   ]);
 }
 
+// ============ 出席紀錄（與繳費紀錄分離）============
+// records 只放「繳費／收據」資料，避免簽到紀錄污染對帳；
+// 「誰來過」記在 attendance。
+const ATTENDANCE_HEADERS = ['timestamp', 'courseDate', 'courseName', 'name', 'phoneLast4', 'memberType', 'identity'];
+
+function addAttendance(rec) {
+  const sheet = getOrCreateSheet(SHEET_NAMES.ATTENDANCE, ATTENDANCE_HEADERS);
+  sheet.appendRow([
+    new Date(),
+    asText(rec.courseDate),
+    rec.courseName,
+    rec.name,
+    asText(rec.phoneLast4),
+    rec.memberType,
+    rec.identity
+  ]);
+}
+
+// 同一個人同一堂是否已有出席紀錄（避免重複簽到產生多筆）
+function hasAttendance(last4, courseDate) {
+  const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
+  if (!sheet) return false;
+  const rows = sheet.getDataRange().getValues();
+  const key = monthDayKey(courseDate);
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][4]) === String(last4) && monthDayKey(rows[i][1]) === key) return true;
+  }
+  return false;
+}
+
 function findRecordByCode(code) {
   const sheet = getSheet(SHEET_NAMES.RECORDS);
   const rows = sheet.getDataRange().getValues();
@@ -514,22 +556,20 @@ function checkin(data) {
     });
   }
 
-  // 已繳費（學期社員已繳），寫入簽到紀錄
-  addRecord({
-    courseDate: course.date,
-    courseName: course.name,
-    name: member.name,
-    phoneLast4: phoneLast4(member.phone),
-    identity: member.identity,
-    memberType: member.memberType,
-    fee: 0,
-    paid: true,
-    receiptItem: feeInfo.item,
-    code: '',
-    receiptImageUrl: ''
-  });
+  // 已繳費（學期社員已繳、或單堂已繳過這堂）→ 記出席，不寫入繳費紀錄
+  const l4 = phoneLast4(member.phone);
+  if (!hasAttendance(l4, course.date)) {
+    addAttendance({
+      courseDate: course.date,
+      courseName: course.name,
+      name: member.name,
+      phoneLast4: l4,
+      memberType: member.memberType,
+      identity: member.identity
+    });
+  }
 
-  const history = getMemberHistory(phoneLast4(member.phone));
+  const history = getMemberHistory(l4);
 
   return jsonResponse({
     status: 'ok',
@@ -969,6 +1009,62 @@ function syncNowAction(data) {
     return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
   }
   return syncMembers();
+}
+
+// 一次性遷移：把 records 裡「未繳費的簽到紀錄」(fee=0 且無 code) 搬到 attendance，
+// 讓 records 只留繳費／收據資料。可重複執行（第二次沒有東西可搬）。
+// 執行方式：Apps Script 編輯器 → 選 migrateAttendance → 執行一次
+function migrateAttendance() {
+  const recSheet = getSheet(SHEET_NAMES.RECORDS);
+  const rows = recSheet.getDataRange().getValues();
+  if (rows.length < 2) {
+    return jsonResponse({ status: 'ok', moved: 0, kept: 0 });
+  }
+
+  const keep = [rows[0]];
+  const toMove = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const fee = Number(r[7]) || 0;
+    const hasCode = String(r[9] == null ? '' : r[9]).trim() !== '';
+    if (fee === 0 && !hasCode) {
+      toMove.push(r);
+    } else {
+      keep.push(r);
+    }
+  }
+
+  // 先寫 attendance（同人同堂去重），完成後才重寫 records —— 順序確保不會遺失資料
+  for (let i = 0; i < toMove.length; i++) {
+    const r = toMove[i];
+    const l4 = String(r[4] == null ? '' : r[4]);
+    if (!hasAttendance(l4, r[1])) {
+      addAttendance({
+        courseDate: r[1],
+        courseName: r[2],
+        name: r[3],
+        phoneLast4: l4,
+        memberType: r[6],
+        identity: r[5]
+      });
+    }
+  }
+
+  const width = rows[0].length;
+  const padded = keep.map(function (row) {
+    const arr = row.slice(0, width);
+    while (arr.length < width) arr.push('');
+    return arr;
+  });
+  recSheet.clear();
+  recSheet.getRange(1, 1, padded.length, width).setValues(padded);
+
+  return jsonResponse({
+    status: 'ok',
+    moved: toMove.length,
+    kept: keep.length - 1,
+    sheet: SHEET_NAMES.ATTENDANCE
+  });
 }
 
 // 保留給舊的可安裝觸發器(onFormSubmit)相容入口：改為執行同步
