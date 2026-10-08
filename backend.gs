@@ -1675,3 +1675,60 @@ function parsePlan(planText) {
     identity: 'student'
   };
 }
+
+// ============================================================
+// 測試資料工具（只在 Apps Script 編輯器手動執行，不影響 Web App）
+//   createTestMembers()：建立 3 位測試社員（可重複執行，會先清掉舊測試資料）
+//   removeTestData()   ：刪除所有測試痕跡（members / records / attendance）
+// 測完務必執行 removeTestData()，避免測試資料混入金流報表
+// ============================================================
+var TEST_MEMBER_PHONES = ['0900000001', '0900000002', '0900000003'];
+
+function createTestMembers() {
+  removeTestData(); // 冪等：先清掉殘留的測試資料
+
+  const course = getActiveCourse();
+  const todayKey = course ? monthDayKey(course.date) : monthDayKey(new Date());
+  const sheet = getSheet(SHEET_NAMES.MEMBERS);
+
+  // members 欄位：A name | B phone | C email | D identity | E memberType | F paidSemester | G enrolledCourses | H locked | I note
+  sheet.appendRow(['測試A-學生單堂', '0900000001', '', 'student', 'single', false, todayKey, true, 'TEST']);
+  sheet.appendRow(['測試B-社會單堂', '0900000002', '', 'public', 'single', false, todayKey, true, 'TEST']);
+  sheet.appendRow(['測試C-學生學期', '0900000003', '', 'student', 'semester', false, '', true, 'TEST']);
+
+  Logger.log('已建立 3 位測試社員，單堂報名堂次 = ' + todayKey);
+  if (!course) {
+    Logger.log('注意：今天沒有 active 的課程，簽到/收款流程要等有課的日子才能測');
+  }
+}
+
+function removeTestData() {
+  const testNorms = TEST_MEMBER_PHONES.map(normalizePhone); // ['900000001', ...]
+  const testLast4 = TEST_MEMBER_PHONES.map(phoneLast4);     // ['0001', '0002', '0003']
+
+  // members：B 欄完整電話正規化比對，精準刪除
+  deleteRowsWhere(getSheet(SHEET_NAMES.MEMBERS), function (row) {
+    return testNorms.indexOf(normalizePhone(row[1])) !== -1;
+  });
+
+  // records / attendance：E 欄只有末四碼，加 D 欄姓名「測試」前綴雙重確認，避免誤刪真人
+  [SHEET_NAMES.RECORDS, SHEET_NAMES.ATTENDANCE].forEach(function (sheetName) {
+    deleteRowsWhere(getSheet(sheetName), function (row) {
+      const last4 = phoneLast4(row[4]);
+      const name = String(row[3] || '');
+      return testLast4.indexOf(last4) !== -1 && name.indexOf('測試') === 0;
+    });
+  });
+
+  Logger.log('測試資料已清除（members / records / attendance）');
+}
+
+// 由下往上刪除符合條件的資料列（避免列位移）
+function deleteRowsWhere(sheet, predicate) {
+  const rows = sheet.getDataRange().getValues();
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (predicate(rows[i])) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+}
