@@ -90,14 +90,23 @@ function jsonResponse(payload, statusCode) {
   return output;
 }
 
+// 同一次請求內只開啟試算表一次（openById 是昂貴的遠端呼叫，每次 1~3 秒；
+// 舊版每個 getSheet 都開一次，confirm 一次請求要開 9 次 → 現場每個按鈕轉圈 10~20 秒）
+var _ssCache = null;
+function getSS() {
+  if (!_ssCache) {
+    _ssCache = SpreadsheetApp.openById(SPREADSHEET_ID);
+  }
+  return _ssCache;
+}
+
 function getSheet(name) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  return ss.getSheetByName(name);
+  return getSS().getSheetByName(name);
 }
 
 // 取得分頁，不存在就自動建立（可帶標題列）
 function getOrCreateSheet(name, headers) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const ss = getSS();
   let sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);
@@ -107,21 +116,33 @@ function getOrCreateSheet(name, headers) {
 }
 
 function getConfig() {
+  // fees 幾乎不變：跨請求快取 5 分鐘，省一次試算表讀取
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('feesConfig');
+  if (hit) return JSON.parse(hit);
+
   const sheet = getSheet(SHEET_NAMES.FEES);
   const data = sheet.getDataRange().getValues();
   const config = {};
   for (let i = 0; i < data.length; i++) {
     config[data[i][0]] = data[i][1];
   }
+  try { cache.put('feesConfig', JSON.stringify(config), 300); } catch (e) {}
   return config;
 }
 
 function getActiveCourse() {
+  // 今日課程在活動期間幾乎不變：跨請求快取 2 分鐘（每個 API 都會呼叫，省下重複讀表）
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('activeCourse');
+  if (hit) return hit === 'NONE' ? null : JSON.parse(hit);
+
   const sheet = getSheet(SHEET_NAMES.COURSES);
   const rows = sheet.getDataRange().getValues();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  let course = null;
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const date = row[0];
@@ -135,14 +156,17 @@ function getActiveCourse() {
     courseDate.setHours(0, 0, 0, 0);
 
     if (courseDate.getTime() === today.getTime()) {
-      return {
+      course = {
         date: formatDate(courseDate),
         name: row[1],
         receiptItem: row[2]
       };
+      break;
     }
   }
-  return null;
+
+  try { cache.put('activeCourse', course ? JSON.stringify(course) : 'NONE', 120); } catch (e) {}
+  return course;
 }
 
 // 解析課程日期：自動辨識民國年（≤200 視為民國年，+1911 轉西元）
