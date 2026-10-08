@@ -287,7 +287,7 @@ function renderMemberList() {
           ${m.note ? '<span class="badge note">有備注</span>' : ''}
         </div>
       </div>
-      <div class="meta">末四碼 ${m.phoneLast4}${!m.relevant ? ' ・ 今天沒報名（可加收）' : ''}${m.credit > 0 ? ` ・ 可折抵 ${formatMoney(m.credit)}` : ''}${m.note ? ' ・ 備注：' + m.note : ''}</div>
+      <div class="meta">末四碼 ${m.phoneLast4}${!m.relevant ? ' ・ 今天沒報名（收款時會自動加收）' : ''}${m.credit > 0 ? ` ・ 可折抵 ${formatMoney(m.credit)}` : ''}${m.note ? ' ・ 備注：' + m.note : ''}</div>
       <div class="actions ${expanded ? 'show' : ''}" id="actions-${m.rowIndex}"></div>
     </div>`;
   });
@@ -313,9 +313,15 @@ function renderActions(rowIndex) {
   if (!box) return;
 
   let html = '<div class="action-btns">';
-  if (m.fee > 0) html += `<button class="btn small warn" data-act="pay">收款 ${formatMoney(m.fee)}</button>`;
+  if (m.fee > 0) {
+    if (!m.relevant && m.memberType === 'single') {
+      // 今天沒報名的單堂社員：一顆按鈕完成「加收今天＋收款」，不讓幹部選擇困難
+      html += `<button class="btn small warn" data-act="payAdd">加收今天＋收款 ${formatMoney(m.fee)}</button>`;
+    } else {
+      html += `<button class="btn small warn" data-act="pay">收款 ${formatMoney(m.fee)}</button>`;
+    }
+  }
   if (!m.attended && m.fee === 0) html += `<button class="btn small blue" data-act="attend">補簽到</button>`;
-  if (!m.relevant && m.memberType === 'single') html += `<button class="btn small warn" data-act="addToday">加收今天這堂</button>`;
   html += `<button class="btn small secondary" data-act="change">變更身份／方案</button>`;
   html += `<button class="btn small secondary" data-act="note">備注</button>`;
   html += '</div><div class="panel-slot"></div>';
@@ -333,18 +339,16 @@ async function handleAction(act, m, box) {
     await doConfirm(m, slot);
   }
 
-  if (act === 'addToday') {
-    // 加收今天：把今天加入他的報名堂次（updateMember addToday），之後名單就會出現待繳金額
-    slot.innerHTML = '<div class="loading"><div class="spinner"></div>處理中...</div>';
+  if (act === 'payAdd') {
+    // 加收今天＋收款：先把今天加入報名堂次，成功後直接進收款流程
+    slot.innerHTML = '<div class="loading"><div class="spinner"></div>加收今天堂次...</div>';
     try {
-      const r = await callAPI('updateMember', { staffPassword, rowIndex: m.rowIndex, addToday: true });
-      toast(`已加收今天堂次，應繳 ${formatMoney(r.fee)}`);
-      await refreshRoster();
-      expandedRow = r.member.rowIndex;
-      renderMemberList();
+      await callAPI('updateMember', { staffPassword, rowIndex: m.rowIndex, addToday: true });
     } catch (err) {
       slot.innerHTML = `<div class="detail" style="color:var(--err);">${err.message}</div>`;
+      return;
     }
+    await doConfirm(m, slot);
   }
 
   if (act === 'attend') {

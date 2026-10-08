@@ -61,14 +61,11 @@
 <div class="wrap">
   <header>
     <h1>師大影像藝術創作社</h1>
-    <div class="subtitle">輸入姓名與電話進行社課簽到。需要繳費的話，到櫃檯付現後此頁面會自動跳出收據。</div>
+    <div class="subtitle">輸入電話即可簽到。需要繳費的話，到櫃檯付現後此頁面會自動跳出收據。</div>
   </header>
 
   <div class="card" id="formCard">
-    <label for="name">姓名</label>
-    <input type="text" id="name" placeholder="輸入報名姓名" autocomplete="name">
-
-    <label for="phone" style="margin-top:16px;">電話（全碼，不用國碼）</label>
+    <label for="phone">電話（全碼，不用國碼）</label>
     <input type="tel" id="phone" placeholder="0912345678" maxlength="12" inputmode="tel" autocomplete="tel">
 
     <button class="btn" id="btnCheckin">查詢簽到狀態</button>
@@ -143,11 +140,10 @@ function normalizeInputPhone(raw) {
 }
 
 $('btnCheckin').addEventListener('click', async () => {
-  const name = $('name').value.trim();
   const phone = normalizeInputPhone($('phone').value);
 
-  if (!name || phone.length < 9) {
-    showResult('err', '請輸入完整姓名與電話（10 碼）');
+  if (phone.length < 9) {
+    showResult('err', '請輸入完整電話（10 碼，0912 開頭）');
     return;
   }
 
@@ -156,8 +152,8 @@ $('btnCheckin').addEventListener('click', async () => {
   $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>查詢中...</div>';
 
   try {
-    const data = await callAPI('checkin', { name, phone });
-    renderResult(data, name, phone);
+    const data = await callAPI('checkin', { phone });
+    renderResult(data, phone);
   } catch (err) {
     const msg = err.message || '連線發生問題，請確認網路後再試';
     showResult('err', msg, msg.indexOf('找不到報名資料') !== -1);
@@ -186,11 +182,11 @@ function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
-function startPolling(name, phone) {
+function startPolling(phone) {
   stopPolling();
   pollTimer = setInterval(async () => {
     try {
-      const r = await callAPI('pollCode', { name, phone });
+      const r = await callAPI('pollCode', { phone });
       if (r.code) {
         stopPolling();
         window.location.href = `receipt.html?code=${encodeURIComponent(r.code)}`;
@@ -206,7 +202,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopPolling();
 });
 
-function renderResult(data, name, phone) {
+function renderResult(data, phone) {
   if (data.status === 'error') {
     const msg = String(data.message || '');
     showResult('err', msg, msg.indexOf('找不到報名資料') !== -1);
@@ -257,6 +253,7 @@ function renderResult(data, name, phone) {
         <div class="spinner blue"></div>
         <div class="msg">等待幹部確認收款中</div>
         <div class="sub">請到櫃檯付現 <b>${formatMoney(data.fee)}</b>，幹部確認後<br>此頁面會自動跳出收據，不用輸入任何密碼。</div>
+        <div class="sub" id="waitHint" style="display:none; margin-top:10px; color:var(--warn);">等太久了嗎？請提醒幹部按「確認收款」；<br>網路不順時可改用下方手動輸入密碼。</div>
       </div>
       <button class="manual-toggle" id="btnManualCode">網路不好？改用手動輸入密碼</button>
       <div class="manual-area" id="manualArea">
@@ -267,7 +264,13 @@ function renderResult(data, name, phone) {
     `;
 
     // 開始輪詢
-    startPolling(name, phone);
+    startPolling(phone);
+
+    // 等超過 60 秒還沒收到 → 顯示提示（不中斷輪詢）
+    setTimeout(() => {
+      const hint = $('waitHint');
+      if (hint && pollTimer) hint.style.display = 'block';
+    }, 60000);
 
     $('btnManualCode').addEventListener('click', () => {
       $('manualArea').classList.toggle('show');

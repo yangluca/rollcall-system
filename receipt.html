@@ -76,9 +76,10 @@
   </div>
 
   <div class="actions" id="actions" style="display:none;">
-    <button class="btn secondary" id="btnDownload">下載圖片</button>
+    <button class="btn secondary" id="btnDownload">儲存圖片</button>
     <button class="btn secondary" id="btnReset">領取下一张</button>
   </div>
+  <div class="detail" id="dlHint" style="display:none; font-size:13px; margin-top:10px;"></div>
 
   <footer>師大影像藝術創作社 · 點名繳費收據系統</footer>
 </div>
@@ -223,21 +224,53 @@ function init3DTilt() {
   window.addEventListener('touchend', endDrag);
 }
 
-// 下載圖片：用 canvas 合成
+// 儲存圖片：優先用系統分享表單（iOS 可直接「儲存影像」進相簿），
+// 不支援時退回傳統下載（iOS Safari 會存到「檔案」App → 下載項目）
 $('btnDownload').addEventListener('click', async () => {
   if (!currentReceipt) return;
   const canvas = await renderReceiptCanvas(currentReceipt);
+
+  // 檔名日期用本地時區（records 存的 courseDate 是 UTC ISO，直接拿去當檔名會醜且差一天）
+  const d = new Date(currentReceipt.courseDate);
+  const dateStr = isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const fname = `收據_${currentReceipt.name}_${dateStr}.png`;
+
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+  const file = new File([blob], fname, { type: 'image/png' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: '電子收據' });
+      showDlHint('在分享選單選「儲存影像」即可存進相簿。');
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // 使用者自己取消，不做任何事
+    }
+  }
+
+  // fallback：傳統下載
   const link = document.createElement('a');
-  link.download = `收據_${currentReceipt.name}_${currentReceipt.courseDate}.png`;
-  link.href = canvas.toDataURL('image/png');
+  link.download = fname;
+  link.href = URL.createObjectURL(blob);
   link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+  showDlHint('已開始下載。iPhone 請到「檔案」App →「下載項目」查看；想存進相簿可改用上方分享（若瀏覽器支援）。');
 });
+
+function showDlHint(msg) {
+  const el = $('dlHint');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.style.display = 'none'; }, 8000);
+}
 
 $('btnReset').addEventListener('click', () => {
   $('code').value = '';
   $('receiptStage').classList.remove('show');
   $('actions').style.display = 'none';
   $('resultCard').classList.remove('show');
+  $('dlHint').style.display = 'none';
   currentReceipt = null;
 });
 

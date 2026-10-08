@@ -188,6 +188,14 @@ function phoneLast4(phone) {
   return s.slice(-4);
 }
 
+// 末四碼比對鍵：補零到 4 碼。
+// 為什麼需要：Sheets 寫入 '0001' 這種字串會自動轉成數字 1（開頭零遺失），
+// 讀回來 phoneLast4(1) = '1'，跟 '0001' 比對永遠失敗（pollCode 卡死的根因）。
+// 比對與寫入一律用這個，即使欄位格式還沒設成純文字也不會炸。
+function last4Key(v) {
+  return phoneLast4(v).padStart(4, '0');
+}
+
 // 電話正規化：只留數字 → 去 886 國碼 → 去開頭 0 → 台灣手機 9 碼
 // 0912345678 → 912345678
 // 912345678 → 912345678
@@ -245,7 +253,8 @@ function rowToMember(row, rowIndex) {
     identity: row[3] || 'student',
     memberType: row[4] || 'single',
     paidSemester: isTrue(row[5]),
-    enrolledCourses: row[6] || '',
+    // Sheets 會把 '10/8' 這種字串自動轉成日期物件 → 轉回「月/日」字串
+    enrolledCourses: row[6] instanceof Date ? monthDayKey(row[6]) : (row[6] || ''),
     locked: isTrue(row[7]),
     note: row[8] || ''
   };
@@ -266,10 +275,10 @@ function findMemberByPhone(phone) {
 function findMemberByLast4(last4) {
   const sheet = getSheet(SHEET_NAMES.MEMBERS);
   const rows = sheet.getDataRange().getValues();
-  const target = phoneLast4(last4);
+  const target = last4Key(last4);
 
   for (let i = 1; i < rows.length; i++) {
-    if (phoneLast4(rows[i][1]) === target) {
+    if (last4Key(rows[i][1]) === target) {
       return rowToMember(rows[i], i + 1);
     }
   }
@@ -337,7 +346,7 @@ function hasPaidSemester(phone, semester, recordRows) {
   const rows = recordRows || getSheet(SHEET_NAMES.RECORDS).getDataRange().getValues();
 
   for (let i = 1; i < rows.length; i++) {
-    if (phoneLast4(rows[i][4]) === phoneLast4(phone) && rows[i][6] === 'semester') {
+    if (last4Key(rows[i][4]) === last4Key(phone) && rows[i][6] === 'semester') {
       // 有學期費繳費紀錄，再看「品名」([10]) 是否同學年度
       const item = String(rows[i][10] || '');
       if (item.indexOf(semester) !== -1) return true;
@@ -351,7 +360,7 @@ function hasPaidSingleCourse(phone, dateKey, recordRows) {
   const rows = recordRows || getSheet(SHEET_NAMES.RECORDS).getDataRange().getValues();
 
   for (let i = 1; i < rows.length; i++) {
-    if (phoneLast4(rows[i][4]) === phoneLast4(phone) && rows[i][6] === 'single') {
+    if (last4Key(rows[i][4]) === last4Key(phone) && rows[i][6] === 'single') {
       const paid = isTrue(rows[i][8]);
       if (paid && monthDayKey(rows[i][1]) === dateKey) return true;
     }
@@ -365,7 +374,7 @@ function singleCourseCredit(phone, semester, recordRows) {
   let sum = 0;
 
   for (let i = 1; i < rows.length; i++) {
-    if (phoneLast4(rows[i][4]) === phoneLast4(phone) && rows[i][6] === 'single' && isTrue(rows[i][8])) {
+    if (last4Key(rows[i][4]) === last4Key(phone) && rows[i][6] === 'single' && isTrue(rows[i][8])) {
       const d = parseDateValue(rows[i][1]);
       if (d && getSemesterName(d) === semester) {
         sum += Number(rows[i][7]) || 0;
@@ -390,7 +399,9 @@ function monthDayKey(input) {
 }
 
 // 解析報名表「單堂選擇」欄（複選，逗號分隔），回傳「月/日」key 陣列
+// 相容 Sheets 自動轉型的日期物件（'10/8' 寫入後被轉成 Date 的情況）
 function parseEnrolledDates(text) {
+  if (text instanceof Date) return [monthDayKey(text)];
   const s = String(text || '').trim();
   if (!s) return [];
   const keys = [];
@@ -403,11 +414,13 @@ function parseEnrolledDates(text) {
 }
 
 // 合併兩串「月/日」堂次：聯集、去重、按日期排序
+// 每個 token 都先經 monthDayKey 正規化（'10/08（四）｜…'、'10/08'、Date 字串都能進）
 function mergeEnrolled(oldStr, newStr) {
   const seen = {};
   const add = s => {
+    if (s instanceof Date) { seen[monthDayKey(s)] = true; return; }
     String(s || '').split(/[,，]/).forEach(x => {
-      const k = x.trim();
+      const k = monthDayKey(x);
       if (k && k.indexOf('/') !== -1) seen[k] = true;
     });
   };
@@ -478,7 +491,7 @@ function addRecord(record) {
     record.courseDate,
     record.courseName,
     record.name,
-    phoneLast4(record.phoneLast4 || record.phone),
+    last4Key(record.phoneLast4 || record.phone),
     record.identity,
     record.memberType,
     record.fee,
@@ -522,11 +535,11 @@ function getMemberHistory(last4) {
   const sheet = getSheet(SHEET_NAMES.RECORDS);
   const rows = sheet.getDataRange().getValues();
   const history = [];
-  const target = phoneLast4(last4);
+  const target = last4Key(last4);
 
   for (let i = 1; i < rows.length; i++) {
     // 讀取端一律用 phoneLast4 正規化（相容 asText 單引號殘留的舊資料）
-    if (phoneLast4(rows[i][4]) === target && isTrue(rows[i][8]) && rows[i][9]) {
+    if (last4Key(rows[i][4]) === target && isTrue(rows[i][8]) && rows[i][9]) {
       history.push({
         courseDate: rows[i][1],
         courseName: rows[i][2],
@@ -552,7 +565,7 @@ function addAttendance(rec) {
     rec.courseDate,
     rec.courseName,
     rec.name,
-    phoneLast4(rec.phoneLast4 || rec.phone),
+    last4Key(rec.phoneLast4 || rec.phone),
     rec.memberType,
     rec.identity,
     rec.note || ''
@@ -565,9 +578,9 @@ function hasAttendance(last4, courseDate) {
   if (!sheet) return false;
   const rows = sheet.getDataRange().getValues();
   const key = monthDayKey(courseDate);
-  const target = phoneLast4(last4);
+  const target = last4Key(last4);
   for (let i = 1; i < rows.length; i++) {
-    if (phoneLast4(rows[i][4]) === target && monthDayKey(rows[i][1]) === key) return true;
+    if (last4Key(rows[i][4]) === target && monthDayKey(rows[i][1]) === key) return true;
   }
   return false;
 }
@@ -602,7 +615,7 @@ function lookupMember(data) {
   }
 
   const feeInfo = calculateFee(member, course);
-  const history = getMemberHistory(phoneLast4(member.phone));
+  const history = getMemberHistory(last4Key(member.phone));
 
   return jsonResponse({
     status: 'ok',
@@ -610,7 +623,7 @@ function lookupMember(data) {
       name: member.name,
       identity: member.identity,
       memberType: member.memberType,
-      phoneLast4: phoneLast4(member.phone)
+      phoneLast4: last4Key(member.phone)
     },
     course: course,
     fee: feeInfo.fee,
@@ -659,7 +672,7 @@ function checkin(data) {
   }
 
   // 已繳費（學期社員已繳、或單堂已繳過這堂）→ 記出席，不寫入繳費紀錄
-  const l4 = phoneLast4(member.phone);
+  const l4 = last4Key(member.phone);
   if (!hasAttendance(l4, course.date)) {
     addAttendance({
       courseDate: course.date,
@@ -736,7 +749,7 @@ function locateMember(data) {
       name: member.name,
       identity: member.identity,
       memberType: member.memberType,
-      phoneLast4: phoneLast4(member.phone),
+      phoneLast4: last4Key(member.phone),
       paidSemester: member.paidSemester
     },
     course: course,
@@ -777,7 +790,7 @@ function confirmPayment(data) {
     courseDate: course.date,
     courseName: course.name,
     name: member.name,
-    phoneLast4: phoneLast4(member.phone),
+    phoneLast4: last4Key(member.phone),
     identity: member.identity,
     memberType: member.memberType,
     fee: feeInfo.fee,
@@ -788,7 +801,7 @@ function confirmPayment(data) {
   });
 
   // 收款完成同時記出席
-  const l4 = phoneLast4(member.phone);
+  const l4 = last4Key(member.phone);
   if (!hasAttendance(l4, course.date)) {
     addAttendance({
       courseDate: course.date,
@@ -842,7 +855,7 @@ function getHistory(data) {
     return jsonResponse({ status: 'error', message: '找不到報名資料' }, 404);
   }
 
-  const history = getMemberHistory(phoneLast4(member.phone));
+  const history = getMemberHistory(last4Key(member.phone));
   return jsonResponse({ status: 'ok', history: history });
 }
 
@@ -889,14 +902,14 @@ function pollCode(data) {
     return jsonResponse({ status: 'error', message: '姓名與電話不符' }, 404);
   }
 
-  const l4 = phoneLast4(member.phone);
+  const l4 = last4Key(member.phone);
   const todayKey = monthDayKey(course.date);
   const sheet = getSheet(SHEET_NAMES.RECORDS);
   const rows = sheet.getDataRange().getValues();
 
   // 從最新往回找：末四碼相符 + 已繳費 + 有 code + 今天這堂
   for (let i = rows.length - 1; i >= 1; i--) {
-    if (phoneLast4(rows[i][4]) === l4 && isTrue(rows[i][8]) && rows[i][9]
+    if (last4Key(rows[i][4]) === l4 && isTrue(rows[i][8]) && rows[i][9]
         && monthDayKey(rows[i][1]) === todayKey) {
       return jsonResponse({
         status: 'ok',
@@ -934,7 +947,7 @@ function roster(data) {
     const aRows = attSheet.getDataRange().getValues();
     for (let i = 1; i < aRows.length; i++) {
       if (monthDayKey(aRows[i][1]) === todayKey) {
-        attendedSet[phoneLast4(aRows[i][4])] = true;
+        attendedSet[last4Key(aRows[i][4])] = true;
       }
     }
   }
@@ -950,7 +963,7 @@ function roster(data) {
     // 今日相關：學期社員全體 ＋ 單堂有報今天堂次的人
     const relevant = member.memberType === 'semester' || enrolledKeys.indexOf(todayKey) !== -1;
     const feeInfo = calculateFee(member, course, ctx);
-    const l4 = phoneLast4(member.phone);
+    const l4 = last4Key(member.phone);
 
     list.push({
       rowIndex: member.rowIndex,
@@ -1058,7 +1071,7 @@ function walkin(data) {
       name: member.name,
       identity: member.identity,
       memberType: member.memberType,
-      phoneLast4: phoneLast4(member.phone)
+      phoneLast4: last4Key(member.phone)
     },
     course: course,
     fee: feeInfo.fee,
@@ -1131,7 +1144,7 @@ function updateMember(data) {
       name: updated.name,
       identity: updated.identity,
       memberType: updated.memberType,
-      phoneLast4: phoneLast4(updated.phone)
+      phoneLast4: last4Key(updated.phone)
     },
     changed: {
       identity: oldIdentity !== identity,
@@ -1163,7 +1176,7 @@ function markAttendance(data) {
     return jsonResponse({ status: 'error', message: '找不到該社員' }, 404);
   }
 
-  const l4 = phoneLast4(member.phone);
+  const l4 = last4Key(member.phone);
   if (hasAttendance(l4, course.date)) {
     return jsonResponse({ status: 'ok', already: true, message: member.name + ' 今天已簽到過' });
   }
@@ -1214,7 +1227,7 @@ function addNote(data) {
     if (!member) {
       return jsonResponse({ status: 'error', message: '找不到該社員' }, 404);
     }
-    const l4 = phoneLast4(member.phone);
+    const l4 = last4Key(member.phone);
     const todayKey = monthDayKey(course.date);
     const attSheet = getSheet(SHEET_NAMES.ATTENDANCE);
     if (!attSheet) {
@@ -1222,7 +1235,7 @@ function addNote(data) {
     }
     const rows = attSheet.getDataRange().getValues();
     for (let i = rows.length - 1; i >= 1; i--) {
-      if (phoneLast4(rows[i][4]) === l4 && monthDayKey(rows[i][1]) === todayKey) {
+      if (last4Key(rows[i][4]) === l4 && monthDayKey(rows[i][1]) === todayKey) {
         const existing = String(rows[i][7] || '').trim();
         attSheet.getRange(i + 1, 8).setValue(existing ? existing + '；' + note : note);
         return jsonResponse({ status: 'ok', scope: scope });
@@ -1265,8 +1278,8 @@ function courseStats(data) {
     const aRows = attSheet.getDataRange().getValues();
     for (let i = 1; i < aRows.length; i++) {
       if (monthDayKey(aRows[i][1]) === todayKey) {
-        attended.push({ time: aRows[i][0], name: aRows[i][3], phoneLast4: phoneLast4(aRows[i][4]) });
-        attendedSet[phoneLast4(aRows[i][4])] = true;
+        attended.push({ time: aRows[i][0], name: aRows[i][3], phoneLast4: last4Key(aRows[i][4]) });
+        attendedSet[last4Key(aRows[i][4])] = true;
       }
     }
   }
@@ -1278,7 +1291,7 @@ function courseStats(data) {
     const r = ctx.recordRows[i];
     if (isTrue(r[8]) && monthDayKey(r[1]) === todayKey) {
       const fee = Number(r[7]) || 0;
-      payments.push({ time: r[0], name: r[3], phoneLast4: phoneLast4(r[4]), item: r[10], fee: fee });
+      payments.push({ time: r[0], name: r[3], phoneLast4: last4Key(r[4]), item: r[10], fee: fee });
       todayTotal += fee;
     }
   }
@@ -1295,7 +1308,7 @@ function courseStats(data) {
     const relevant = member.memberType === 'semester' || enrolledKeys.indexOf(todayKey) !== -1;
     if (!relevant) continue;
     const feeInfo = calculateFee(member, course, ctx);
-    const l4 = phoneLast4(member.phone);
+    const l4 = last4Key(member.phone);
     expected.push({
       name: member.name,
       phoneLast4: l4,
@@ -1600,7 +1613,7 @@ function migrateAttendance() {
   // 先寫 attendance（同人同堂去重），完成後才重寫 records —— 順序確保不會遺失資料
   for (let i = 0; i < toMove.length; i++) {
     const r = toMove[i];
-    const l4 = phoneLast4(r[4]);
+    const l4 = last4Key(r[4]);
     if (!hasAttendance(l4, r[1])) {
       addAttendance({
         courseDate: r[1],
@@ -1630,26 +1643,75 @@ function migrateAttendance() {
   });
 }
 
-// v2.0 一次性設定：電話欄設純文字（防開頭 0 被吃）、補齊 note 欄標題
-// 執行方式：Apps Script 編輯器 → 選 setupV2 → 執行一次
+// v2.x 一次性設定（可重複執行，冪等）：
+//  1. 把會被 Sheets 自動轉型的欄位設為「純文字」格式
+//     （'0001'→數字 1、'10/8'→日期物件，這兩個轉型分別炸掉 pollCode 與今日名單）
+//  2. 修復已經被轉型破壞的既有資料
+//  3. 補齊欄標題
+// 執行方式：Apps Script 編輯器 → 選 setupV2 → 執行
 function setupV2() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const report = [];
 
-  // members：電話欄（B）設為純文字；補 H（locked）、I（note）標題
+  // ===== members =====
   const members = ss.getSheetByName(SHEET_NAMES.MEMBERS);
-  members.getRange('B:B').setNumberFormat('@');
+  members.getRange('B:B').setNumberFormat('@'); // 電話
+  members.getRange('G:G').setNumberFormat('@'); // 報名堂次（防 '10/8' → 日期）
   if (members.getRange(1, 8).getValue() !== 'locked') members.getRange(1, 8).setValue('locked');
   if (members.getRange(1, 9).getValue() !== 'note') members.getRange(1, 9).setValue('note');
 
-  // records：補 M 欄 note 標題
+  // 修復 G 欄：已變成日期物件的堂次 → 轉回「月/日」字串
+  const mRows = members.getDataRange().getValues();
+  let gFixed = 0;
+  for (let i = 1; i < mRows.length; i++) {
+    if (mRows[i][6] instanceof Date) {
+      members.getRange(i + 1, 7).setValue(monthDayKey(mRows[i][6]));
+      gFixed++;
+    }
+  }
+  report.push('members 堂次修復 ' + gFixed + ' 筆');
+
+  // ===== records =====
   const records = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  records.getRange('E:E').setNumberFormat('@'); // 末四碼（防 '0001' → 1）
+  records.getRange('J:J').setNumberFormat('@'); // 收據 code
   if (records.getRange(1, 13).getValue() !== 'note') records.getRange(1, 13).setValue('note');
 
-  // attendance：補 H 欄 note 標題（不存在則建立）
+  // 修復 E 欄：數字末四碼 → 補零 4 碼字串
+  const rRows = records.getDataRange().getValues();
+  let eFixed = 0;
+  for (let i = 1; i < rRows.length; i++) {
+    const cur = rRows[i][4];
+    if (cur === '' || cur == null) continue;
+    const fixed = last4Key(cur);
+    if (String(cur) !== fixed) {
+      records.getRange(i + 1, 5).setValue(fixed);
+      eFixed++;
+    }
+  }
+  report.push('records 末四碼修復 ' + eFixed + ' 筆');
+
+  // ===== attendance =====
   const att = getOrCreateSheet(SHEET_NAMES.ATTENDANCE, ATTENDANCE_HEADERS);
+  att.getRange('E:E').setNumberFormat('@'); // 末四碼
   if (att.getRange(1, 8).getValue() !== 'note') att.getRange(1, 8).setValue('note');
 
-  return jsonResponse({ status: 'ok', message: 'setupV2 完成：電話欄已設純文字，note 欄標題已補齊' });
+  const aRows = att.getDataRange().getValues();
+  let aFixed = 0;
+  for (let i = 1; i < aRows.length; i++) {
+    const cur = aRows[i][4];
+    if (cur === '' || cur == null) continue;
+    const fixed = last4Key(cur);
+    if (String(cur) !== fixed) {
+      att.getRange(i + 1, 5).setValue(fixed);
+      aFixed++;
+    }
+  }
+  report.push('attendance 末四碼修復 ' + aFixed + ' 筆');
+
+  const msg = 'setupV2 完成：' + report.join('、');
+  Logger.log(msg);
+  return jsonResponse({ status: 'ok', message: msg });
 }
 
 // 保留給舊的可安裝觸發器(onFormSubmit)相容入口：改為執行同步
@@ -1704,7 +1766,7 @@ function createTestMembers() {
 
 function removeTestData() {
   const testNorms = TEST_MEMBER_PHONES.map(normalizePhone); // ['900000001', ...]
-  const testLast4 = TEST_MEMBER_PHONES.map(phoneLast4);     // ['0001', '0002', '0003']
+  const testLast4 = TEST_MEMBER_PHONES.map(last4Key);         // ['0001', '0002', '0003']
 
   // members：B 欄完整電話正規化比對，精準刪除
   deleteRowsWhere(getSheet(SHEET_NAMES.MEMBERS), function (row) {
@@ -1714,7 +1776,7 @@ function removeTestData() {
   // records / attendance：E 欄只有末四碼，加 D 欄姓名「測試」前綴雙重確認，避免誤刪真人
   [SHEET_NAMES.RECORDS, SHEET_NAMES.ATTENDANCE].forEach(function (sheetName) {
     deleteRowsWhere(getSheet(sheetName), function (row) {
-      const last4 = phoneLast4(row[4]);
+      const last4 = last4Key(row[4]);
       const name = String(row[3] || '');
       return testLast4.indexOf(last4) !== -1 && name.indexOf('測試') === 0;
     });
