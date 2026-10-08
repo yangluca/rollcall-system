@@ -1159,7 +1159,7 @@ function updateMember(data) {
   });
 }
 
-// 14. 補簽到（免繳費或已繳費社員，幹部直接記出席）
+// 14. 簽到狀態修改：補簽到；data.remove=true 時取消今日簽到（刪出席列，不動繳費紀錄）
 function markAttendance(data) {
   const staff = validateStaff(data.staffPassword);
   if (!staff) {
@@ -1177,6 +1177,28 @@ function markAttendance(data) {
   }
 
   const l4 = last4Key(member.phone);
+
+  // 取消簽到：刪除今天這堂的出席列（同人多列全刪；繳費紀錄保留）
+  if (data.remove) {
+    const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
+    if (!sheet) {
+      return jsonResponse({ status: 'error', message: '尚無任何出席紀錄' }, 404);
+    }
+    const todayKey = monthDayKey(course.date);
+    const rows = sheet.getDataRange().getValues();
+    let removed = 0;
+    for (let i = rows.length - 1; i >= 1; i--) {
+      if (last4Key(rows[i][4]) === l4 && monthDayKey(rows[i][1]) === todayKey) {
+        sheet.deleteRow(i + 1);
+        removed++;
+      }
+    }
+    if (!removed) {
+      return jsonResponse({ status: 'error', message: member.name + ' 今天沒有出席紀錄' }, 404);
+    }
+    return jsonResponse({ status: 'ok', removed: true, message: '已取消 ' + member.name + ' 今日的簽到（繳費紀錄保留）' });
+  }
+
   if (hasAttendance(l4, course.date)) {
     return jsonResponse({ status: 'ok', already: true, message: member.name + ' 今天已簽到過' });
   }

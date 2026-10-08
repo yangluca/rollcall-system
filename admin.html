@@ -321,7 +321,11 @@ function renderActions(rowIndex) {
       html += `<button class="btn small warn" data-act="pay">收款 ${formatMoney(m.fee)}</button>`;
     }
   }
-  if (!m.attended && m.fee === 0) html += `<button class="btn small blue" data-act="attend">補簽到</button>`;
+  if (!m.attended) {
+    html += `<button class="btn small blue" data-act="attend">補簽到</button>`;
+  } else {
+    html += `<button class="btn small secondary" data-act="unattend">取消簽到</button>`;
+  }
   html += `<button class="btn small secondary" data-act="change">變更身份／方案</button>`;
   html += `<button class="btn small secondary" data-act="note">備注</button>`;
   html += '</div><div class="panel-slot"></div>';
@@ -352,9 +356,24 @@ async function handleAction(act, m, box) {
   }
 
   if (act === 'attend') {
+    // 未繳費就補簽到：只記出席、不記收款，先讓幹部確認
+    if (m.fee > 0 && !confirm(`${m.name} 還有 ${formatMoney(m.fee)} 未繳。\n補簽到只記出席、不會記收款，確定要補簽到嗎？`)) return;
     slot.innerHTML = '<div class="loading"><div class="spinner"></div>簽到中...</div>';
     try {
       const r = await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex });
+      toast(r.message);
+      await refreshRoster();
+    } catch (err) {
+      slot.innerHTML = `<div class="detail" style="color:var(--err);">${err.message}</div>`;
+    }
+  }
+
+  if (act === 'unattend') {
+    // 取消簽到：只刪出席紀錄，已收的款項與收據不受影響
+    if (!confirm(`確定要取消 ${m.name} 今日的簽到嗎？\n（繳費紀錄與收據不會被刪除）`)) return;
+    slot.innerHTML = '<div class="loading"><div class="spinner"></div>取消簽到中...</div>';
+    try {
+      const r = await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex, remove: true });
       toast(r.message);
       await refreshRoster();
     } catch (err) {
