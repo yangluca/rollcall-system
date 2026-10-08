@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>幹部收款 · 師大影像藝術創作社</title>
+<title>幹部後台 · 師大影像藝術創作社</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
@@ -15,94 +15,144 @@
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{height:100%; margin:0; font-family:'Space Grotesk','PingFang TC',sans-serif; background:var(--bg); color:var(--fg);}
-  .wrap{min-height:100%; max-width:420px; margin:0 auto; padding:24px 20px 40px; display:flex; flex-direction:column;}
-  header{margin-bottom:24px;}
+  .wrap{min-height:100%; max-width:480px; margin:0 auto; padding:24px 20px 40px; display:flex; flex-direction:column;}
+  header{margin-bottom:20px;}
   h1{font-size:22px; font-weight:600; margin:0 0 6px; letter-spacing:-.02em;}
   .subtitle{color:var(--muted); font-size:14px;}
   .card{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); margin-bottom:16px;}
   label{display:block; font-size:13px; font-weight:500; margin-bottom:8px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
-  input,select{width:100%; padding:14px 16px; font-size:17px; border:1.5px solid var(--line); border-radius:12px; outline:none; font-family:inherit; background:#fff;}
-  input:focus,select:focus{border-color:var(--fg);}
-  .btn{width:100%; padding:16px; font-size:17px; font-weight:600; border:none; border-radius:12px; background:var(--fg); color:#fff; cursor:pointer; margin-top:12px; transition:transform .1s, opacity .15s;}
+  input,select,textarea{width:100%; padding:13px 15px; font-size:16px; border:1.5px solid var(--line); border-radius:12px; outline:none; font-family:inherit; background:#fff;}
+  input:focus,select:focus,textarea:focus{border-color:var(--fg);}
+  .btn{width:100%; padding:14px; font-size:16px; font-weight:600; border:none; border-radius:12px; background:var(--fg); color:#fff; cursor:pointer; margin-top:12px; transition:transform .1s, opacity .15s;}
   .btn:active{transform:scale(.98);}
   .btn:disabled{opacity:.5; cursor:not-allowed;}
   .btn.secondary{background:#fff; color:var(--fg); border:1.5px solid var(--line);}
-  .result{display:none;}
-  .result.show{display:block;}
-  .status{display:flex; align-items:center; gap:10px; font-size:18px; font-weight:600; margin-bottom:12px;}
+  .btn.small{width:auto; padding:9px 14px; font-size:13px; margin-top:0; border-radius:9px;}
+  .btn.small.warn{background:var(--warn);}
+  .btn.small.blue{background:var(--blue);}
+  .status{display:flex; align-items:center; gap:10px; font-size:17px; font-weight:600; margin-bottom:12px;}
   .status.ok{color:var(--ok);}
   .status.err{color:var(--err);}
-  .detail{font-size:15px; color:var(--muted); line-height:1.6;}
+  .detail{font-size:14px; color:var(--muted); line-height:1.6;}
   .detail b{color:var(--fg);}
-  .fee-box{background:#fafafa; border-radius:12px; padding:16px; margin:16px 0; text-align:center;}
-  .fee-box .amount{font-size:36px; font-weight:600; color:var(--fg);}
-  .code-box{background:#f0f7ff; border:2px solid var(--blue); border-radius:12px; padding:20px; text-align:center; margin:16px 0;}
-  .code-box .code{font-size:42px; font-weight:600; color:var(--blue); letter-spacing:.2em;}
-  .code-box .hint{font-size:13px; color:var(--muted); margin-top:8px;}
-  .loading{text-align:center; color:var(--muted); padding:40px 0;}
-  .spinner{width:28px; height:28px; border:2px solid var(--line); border-top-color:var(--fg); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 12px;}
+  .code-box{background:#f0f7ff; border:2px solid var(--blue); border-radius:12px; padding:16px; text-align:center; margin:14px 0;}
+  .code-box .code{font-size:36px; font-weight:600; color:var(--blue); letter-spacing:.2em;}
+  .code-box .hint{font-size:13px; color:var(--muted); margin-top:6px; line-height:1.5;}
+  .loading{text-align:center; color:var(--muted); padding:32px 0;}
+  .spinner{width:26px; height:26px; border:2px solid var(--line); border-top-color:var(--fg); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 10px;}
   @keyframes spin{to{transform:rotate(360deg);}}
   footer{margin-top:auto; padding-top:24px; text-align:center; font-size:12px; color:var(--muted);}
-  .mode-tabs{display:flex; gap:8px; margin-bottom:16px;}
-  .mode-tab{flex:1; padding:12px; text-align:center; font-size:14px; font-weight:500; border-radius:10px; cursor:pointer; background:#fafafa; color:var(--muted); border:1px solid var(--line);}
-  .mode-tab.active{background:var(--fg); color:#fff; border-color:var(--fg);}
+  .tabs{display:flex; gap:8px; margin-bottom:16px;}
+  .tab{flex:1; padding:12px 6px; text-align:center; font-size:14px; font-weight:500; border-radius:10px; cursor:pointer; background:#fafafa; color:var(--muted); border:1px solid var(--line);}
+  .tab.active{background:var(--fg); color:#fff; border-color:var(--fg);}
   .section{display:none;}
   .section.active{display:block;}
+  .topbar{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:14px;}
+  .topbar .course{font-size:14px; font-weight:600;}
+  .topbar .course span{display:block; font-size:12px; color:var(--muted); font-weight:400; margin-top:2px;}
+  .icon-btns{display:flex; gap:8px;}
+  .icon-btn{padding:8px 12px; font-size:13px; border:1.5px solid var(--line); border-radius:9px; background:#fff; cursor:pointer; font-family:inherit; color:var(--fg); white-space:nowrap;}
+  .member-row{border:1px solid var(--line); border-radius:12px; padding:13px 15px; margin-bottom:10px; cursor:pointer; background:#fff;}
+  .member-row .line1{display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .member-row .name{font-size:16px; font-weight:600;}
+  .member-row .meta{font-size:12px; color:var(--muted); margin-top:4px; line-height:1.5;}
+  .badges{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;}
+  .badge{font-size:11px; padding:3px 9px; border-radius:20px; white-space:nowrap;}
+  .badge.type{background:var(--line); color:var(--muted);}
+  .badge.unpaid{background:#fdf3e3; color:var(--warn); font-weight:600;}
+  .badge.paid{background:#e6f4ea; color:var(--ok);}
+  .badge.attended{background:#e8f0fd; color:var(--blue);}
+  .badge.note{background:#f3e8fd; color:#6f42c1;}
+  .actions{display:none; margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);}
+  .actions.show{display:block;}
+  .action-btns{display:flex; gap:8px; flex-wrap:wrap;}
+  .inline-panel{margin-top:12px; background:#fafafa; border-radius:10px; padding:14px;}
+  .inline-panel label{margin-top:8px;}
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;}
+  .stat-box{background:#fafafa; border-radius:12px; padding:14px; text-align:center;}
+  .stat-box .num{font-size:26px; font-weight:600;}
+  .stat-box .lbl{font-size:12px; color:var(--muted); margin-top:4px;}
+  .mini-list{font-size:14px;}
+  .mini-item{display:flex; justify-content:space-between; gap:8px; padding:9px 0; border-top:1px solid var(--line); line-height:1.4;}
+  .mini-item:first-child{border-top:none;}
+  .mini-item .r{color:var(--muted); white-space:nowrap;}
+  h3.sec{font-size:14px; color:var(--muted); margin:18px 0 10px; font-weight:500;}
+  .toast{position:sticky; bottom:12px; background:var(--fg); color:#fff; padding:12px 16px; border-radius:12px; font-size:14px; text-align:center; display:none; z-index:10;}
+  .toast.show{display:block;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>幹部收款後台</h1>
-    <div class="subtitle">輸入末四碼定位社員，確認收款後產生領取密碼。</div>
+    <h1>幹部後台</h1>
+    <div class="subtitle">名單點名、收款、現場報名、金流報表。</div>
   </header>
 
-  <div class="card">
+  <!-- 登入 -->
+  <div class="card" id="loginCard">
     <label for="staffPassword">幹部密碼</label>
-    <input type="password" id="staffPassword" placeholder="至少 6 位，可含字母" maxlength="20" inputmode="text">
+    <input type="password" id="staffPassword" placeholder="輸入幹部密碼" maxlength="20">
+    <button class="btn" id="btnLogin">進入後台</button>
+    <div class="detail" id="loginMsg" style="margin-top:10px; color:var(--err);"></div>
+  </div>
 
-    <div class="mode-tabs" style="margin-top:16px;">
-      <div class="mode-tab active" data-mode="locate">定位收款</div>
-      <div class="mode-tab" data-mode="manual">手動代簽</div>
+  <!-- 主畫面 -->
+  <div id="mainArea" style="display:none;">
+    <div class="topbar">
+      <div class="course" id="courseInfo">今日課程<span></span></div>
+      <div class="icon-btns">
+        <button class="icon-btn" id="btnRefresh">重新整理</button>
+        <button class="icon-btn" id="btnSync">同步名單</button>
+      </div>
     </div>
 
-    <div class="section active" id="locateSection">
-      <label for="last4">社員電話末四碼</label>
-      <input type="tel" id="last4" placeholder="0000" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
-      <button class="btn" id="btnLocate">定位社員</button>
+    <div class="tabs">
+      <div class="tab active" data-tab="roster">名單</div>
+      <div class="tab" data-tab="walkin">現場報名</div>
+      <div class="tab" data-tab="report">報表</div>
     </div>
 
-    <div class="section" id="manualSection">
-      <label for="mName">姓名</label>
-      <input type="text" id="mName" placeholder="社員姓名">
-      <label for="mLast4" style="margin-top:12px;">電話末四碼</label>
-      <input type="tel" id="mLast4" placeholder="0000" maxlength="4" inputmode="numeric">
-      <label for="mIdentity" style="margin-top:12px;">身份</label>
-      <select id="mIdentity">
-        <option value="student">學生</option>
-        <option value="public">社會人士</option>
-      </select>
-      <label for="mMemberType" style="margin-top:12px;">會員類型</label>
-      <select id="mMemberType">
-        <option value="single">單堂社員</option>
-        <option value="semester">學期社員</option>
-      </select>
-      <button class="btn" id="btnManual">代簽到</button>
+    <!-- 名單 -->
+    <div class="section active" id="tab-roster">
+      <input type="search" id="searchBox" placeholder="搜尋姓名或末四碼（可搜全體社員）" style="margin-bottom:10px;">
+      <div class="tabs" style="margin-bottom:14px;">
+        <div class="tab active" id="filterToday">今日相關</div>
+        <div class="tab" id="filterAll">全部社員</div>
+      </div>
+      <div id="memberList"></div>
+    </div>
+
+    <!-- 現場報名 -->
+    <div class="section" id="tab-walkin">
+      <div class="card">
+        <label for="wName">姓名</label>
+        <input type="text" id="wName" placeholder="社員姓名">
+        <label for="wPhone" style="margin-top:12px;">電話（全碼）</label>
+        <input type="tel" id="wPhone" placeholder="0912345678" maxlength="12" inputmode="tel">
+        <label for="wIdentity" style="margin-top:12px;">身份</label>
+        <select id="wIdentity">
+          <option value="student">學生</option>
+          <option value="public">社會人士</option>
+        </select>
+        <label for="wMemberType" style="margin-top:12px;">方案</label>
+        <select id="wMemberType">
+          <option value="single">單堂社員</option>
+          <option value="semester">學期社員</option>
+        </select>
+        <button class="btn" id="btnWalkin">建立報名並計算費用</button>
+      </div>
+      <div id="walkinResult"></div>
+    </div>
+
+    <!-- 報表 -->
+    <div class="section" id="tab-report">
+      <div id="reportContent">
+        <div class="loading"><div class="spinner"></div>載入中...</div>
+      </div>
     </div>
   </div>
 
-  <div class="card result" id="resultCard">
-    <div id="resultContent"></div>
-  </div>
-
-  <div class="card">
-    <label>報名名單同步</label>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5;">
-      從報名表單拉最新名單。社員現場填表後簽到時也會自動同步，這裡是課前手動拉一次用。
-    </div>
-    <button class="btn" id="btnSync" style="background:#fff;color:var(--fg);border:1.5px solid var(--line);">同步報名資料</button>
-  </div>
-
+  <div class="toast" id="toast"></div>
   <footer>師大影像藝術創作社 · 點名繳費收據系統</footer>
 </div>
 
@@ -110,19 +160,23 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbyyCMJBLqtjN8rUH6i-IDOrmVyWPpTt99D1_zNDrCOwbbisi6jjlOhPEaIa6VPgV8fN/exec';
 const $ = id => document.getElementById(id);
 
-function formatMoney(n) {
-  return '$' + Number(n).toLocaleString('zh-TW');
+let staffPassword = '';
+let rosterData = null;      // 最近一次 roster 回應
+let showAll = false;        // 名單篩選：今日相關 / 全部
+let expandedRow = null;     // 目前展開操作的 members rowIndex
+
+function formatMoney(n) { return '$' + Number(n).toLocaleString('zh-TW'); }
+function fmtTime(t) {
+  const d = new Date(t);
+  if (isNaN(d.getTime())) return '';
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
 
-// GAS Web App 的回應偶爾會整段失敗（回 Google 的錯誤頁而非 JSON），
-// 這是 Google 端重定向機制不穩，不是資料問題 → 自動重試。
-// 只有「網路錯誤 / 非 JSON 回應」才重試；業務錯誤（status:'error'）直接回報。
 function sleepMs(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function callAPI(action, payload) {
   const maxTry = 3;
   let lastErr = null;
-
   for (let attempt = 1; attempt <= maxTry; attempt++) {
     let text = null;
     try {
@@ -137,193 +191,397 @@ async function callAPI(action, payload) {
       if (attempt < maxTry) { await sleepMs(700 * attempt); continue; }
       throw lastErr;
     }
-
     let json = null;
-    try {
-      json = JSON.parse(text);
-    } catch (e) {
+    try { json = JSON.parse(text); }
+    catch (e) {
       lastErr = new Error('伺服器忙線中，請稍候再試一次');
       if (attempt < maxTry) { await sleepMs(700 * attempt); continue; }
       throw lastErr;
     }
-
-    if (json.status === 'error') {
-      throw new Error(json.message || '伺服器錯誤');
-    }
+    if (json.status === 'error') throw new Error(json.message || '伺服器錯誤');
     return json;
   }
   throw lastErr;
 }
 
-// 模式切換
-document.querySelectorAll('.mode-tab').forEach(tab => {
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? 'var(--err)' : 'var(--fg)';
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ===== 登入 =====
+$('btnLogin').addEventListener('click', async () => {
+  staffPassword = $('staffPassword').value.trim();
+  if (!staffPassword) { $('loginMsg').textContent = '請輸入幹部密碼'; return; }
+  $('btnLogin').disabled = true;
+  $('loginMsg').textContent = '';
+  try {
+    const data = await callAPI('roster', { staffPassword });
+    rosterData = data;
+    $('loginCard').style.display = 'none';
+    $('mainArea').style.display = 'block';
+    $('courseInfo').innerHTML = `${data.course.name}<span>${data.course.date} ・ ${data.members.filter(m=>m.relevant).length} 人今日相關</span>`;
+    renderMemberList();
+  } catch (err) {
+    $('loginMsg').textContent = err.message;
+  } finally {
+    $('btnLogin').disabled = false;
+  }
+});
+
+// ===== 分頁切換 =====
+document.querySelectorAll('.tabs .tab[data-tab]').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tabs .tab[data-tab]').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     tab.classList.add('active');
-    $(tab.dataset.mode + 'Section').classList.add('active');
+    $('tab-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'report') loadReport();
   });
 });
 
-// 定位社員
-$('btnLocate').addEventListener('click', async () => {
-  const staffPassword = $('staffPassword').value.trim();
-  const last4 = $('last4').value.trim();
+// ===== 名單篩選 =====
+$('filterToday').addEventListener('click', () => { showAll = false; expandedRow = null;
+  $('filterToday').classList.add('active'); $('filterAll').classList.remove('active'); renderMemberList(); });
+$('filterAll').addEventListener('click', () => { showAll = true; expandedRow = null;
+  $('filterAll').classList.add('active'); $('filterToday').classList.remove('active'); renderMemberList(); });
+$('searchBox').addEventListener('input', () => { expandedRow = null; renderMemberList(); });
 
-  if (!staffPassword || !/^\d{4}$/.test(last4)) {
-    showResult('err', '請輸入幹部密碼與社員末四碼');
+function typeLabel(m) {
+  return (m.memberType === 'semester' ? '學期' : '單堂') + '・' + (m.identity === 'student' ? '學生' : '社會');
+}
+
+function renderMemberList() {
+  if (!rosterData) return;
+  const q = $('searchBox').value.trim().toLowerCase();
+  let list = rosterData.members.slice();
+
+  // 搜尋永遠搜全體（突然出現的社員也找得到）
+  if (q) {
+    list = list.filter(m =>
+      String(m.name).toLowerCase().includes(q) || String(m.phoneLast4).includes(q)
+    );
+  } else if (!showAll) {
+    list = list.filter(m => m.relevant);
+  }
+
+  if (list.length === 0) {
+    $('memberList').innerHTML = '<div class="detail" style="text-align:center; padding:24px 0;">沒有符合的社員。</div>';
     return;
   }
 
-  $('btnLocate').disabled = true;
-  $('resultCard').classList.add('show');
-  $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>查詢中...</div>';
+  let html = '';
+  list.forEach(m => {
+    const expanded = expandedRow === m.rowIndex;
+    html += `<div class="member-row" data-row="${m.rowIndex}">
+      <div class="line1">
+        <div class="name">${m.name}</div>
+        <div class="badges">
+          <span class="badge type">${typeLabel(m)}</span>
+          ${m.fee > 0 ? `<span class="badge unpaid">待繳 ${formatMoney(m.fee)}</span>` : `<span class="badge paid">${m.attended ? '已繳／免繳' : '無需繳費'}</span>`}
+          ${m.attended ? '<span class="badge attended">已簽到</span>' : ''}
+          ${m.note ? '<span class="badge note">有備注</span>' : ''}
+        </div>
+      </div>
+      <div class="meta">末四碼 ${m.phoneLast4}${!m.relevant ? ' ・ 今天沒報名（可加收）' : ''}${m.credit > 0 ? ` ・ 可折抵 ${formatMoney(m.credit)}` : ''}${m.note ? ' ・ 備注：' + m.note : ''}</div>
+      <div class="actions ${expanded ? 'show' : ''}" id="actions-${m.rowIndex}"></div>
+    </div>`;
+  });
+  $('memberList').innerHTML = html;
 
-  try {
-    const data = await callAPI('locate', { staffPassword, last4 });
-    renderLocateResult(data, staffPassword, last4);
-  } catch (err) {
-    showResult('err', err.message || '連線發生問題');
-  } finally {
-    $('btnLocate').disabled = false;
+  document.querySelectorAll('.member-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.actions')) return; // 操作區的點擊不觸發收合
+      const idx = parseInt(row.dataset.row, 10);
+      expandedRow = expandedRow === idx ? null : idx;
+      renderMemberList();
+      if (expandedRow) renderActions(idx);
+    });
+  });
+
+  if (expandedRow) renderActions(expandedRow);
+}
+
+function renderActions(rowIndex) {
+  const m = rosterData.members.find(x => x.rowIndex === rowIndex);
+  if (!m) return;
+  const box = $('actions-' + rowIndex);
+  if (!box) return;
+
+  let html = '<div class="action-btns">';
+  if (m.fee > 0) html += `<button class="btn small warn" data-act="pay">收款 ${formatMoney(m.fee)}</button>`;
+  if (!m.attended && m.fee === 0) html += `<button class="btn small blue" data-act="attend">補簽到</button>`;
+  if (!m.relevant && m.memberType === 'single') html += `<button class="btn small warn" data-act="addToday">加收今天這堂</button>`;
+  html += `<button class="btn small secondary" data-act="change">變更身份／方案</button>`;
+  html += `<button class="btn small secondary" data-act="note">備注</button>`;
+  html += '</div><div class="panel-slot"></div>';
+  box.innerHTML = html;
+
+  box.querySelectorAll('button[data-act]').forEach(btn => {
+    btn.addEventListener('click', () => handleAction(btn.dataset.act, m, box));
+  });
+}
+
+async function handleAction(act, m, box) {
+  const slot = box.querySelector('.panel-slot');
+
+  if (act === 'pay') {
+    await doConfirm(m, slot);
   }
-});
 
-function renderLocateResult(data, staffPassword, last4) {
-  if (data.status === 'error') {
-    showResult('err', data.message);
-    return;
+  if (act === 'addToday') {
+    // 加收今天：把今天加入他的報名堂次（updateMember addToday），之後名單就會出現待繳金額
+    slot.innerHTML = '<div class="loading"><div class="spinner"></div>處理中...</div>';
+    try {
+      const r = await callAPI('updateMember', { staffPassword, rowIndex: m.rowIndex, addToday: true });
+      toast(`已加收今天堂次，應繳 ${formatMoney(r.fee)}`);
+      await refreshRoster();
+      expandedRow = r.member.rowIndex;
+      renderMemberList();
+    } catch (err) {
+      slot.innerHTML = `<div class="detail" style="color:var(--err);">${err.message}</div>`;
+    }
   }
 
-  const m = data.member;
-  const fee = data.fee;
-
-  let html = `
-    <div class="status ok"><span>✓</span>已定位社員</div>
-    <div class="detail">
-      <b>${m.name}</b>（${m.identity === 'student' ? '學生' : '社會人士'}）<br>
-      會員類型：${m.memberType === 'semester' ? '學期社員' : '單堂社員'}<br>
-      課程：${data.course.name}<br>
-      品名：${data.receiptItem}
-    </div>
-    <div class="fee-box">
-      <div class="amount">${formatMoney(fee)}</div>
-      <div class="unit">應繳金額</div>
-    </div>
-  `;
-
-  if (fee > 0) {
-    html += `<button class="btn" id="btnConfirm">確認已收現金 ${formatMoney(fee)}</button>`;
-  } else {
-    html += `<div class="detail" style="text-align:center;">本堂無需繳費，可直接完成簽到。</div>`;
+  if (act === 'attend') {
+    slot.innerHTML = '<div class="loading"><div class="spinner"></div>簽到中...</div>';
+    try {
+      const r = await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex });
+      toast(r.message);
+      await refreshRoster();
+    } catch (err) {
+      slot.innerHTML = `<div class="detail" style="color:var(--err);">${err.message}</div>`;
+    }
   }
 
-  $('resultContent').innerHTML = html;
-
-  if ($('btnConfirm')) {
-    $('btnConfirm').addEventListener('click', async () => {
-      $('btnConfirm').disabled = true;
-      $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>產生密碼中...</div>';
+  if (act === 'change') {
+    slot.innerHTML = `
+      <div class="inline-panel">
+        <label>身份</label>
+        <select id="chgIdentity">
+          <option value="student" ${m.identity === 'student' ? 'selected' : ''}>學生</option>
+          <option value="public" ${m.identity === 'public' ? 'selected' : ''}>社會人士</option>
+        </select>
+        <label>方案</label>
+        <select id="chgType">
+          <option value="single" ${m.memberType === 'single' ? 'selected' : ''}>單堂社員</option>
+          <option value="semester" ${m.memberType === 'semester' ? 'selected' : ''}>學期社員</option>
+        </select>
+        <button class="btn" id="btnApplyChange">套用變更</button>
+        <div class="detail" id="chgMsg" style="margin-top:8px;"></div>
+      </div>`;
+    $('btnApplyChange').addEventListener('click', async () => {
+      $('btnApplyChange').disabled = true;
       try {
-        const confirmData = await callAPI('confirm', { staffPassword, last4 });
-        renderConfirmResult(confirmData);
+        const r = await callAPI('updateMember', {
+          staffPassword, rowIndex: m.rowIndex,
+          identity: $('chgIdentity').value, memberType: $('chgType').value
+        });
+        let msg = `已更新：${typeLabel(r.member)}，今日應繳 ${formatMoney(r.fee)}`;
+        if (r.credit > 0) msg += `（已折抵 ${formatMoney(r.credit)}）`;
+        if (r.refundHint) msg += '。' + r.refundHint;
+        toast('變更完成');
+        await refreshRoster();
+        expandedRow = r.member.rowIndex;
+        renderMemberList();
+        const newBox = $('actions-' + r.member.rowIndex);
+        if (newBox) newBox.querySelector('.panel-slot').innerHTML =
+          `<div class="detail" style="color:var(--ok); margin-top:8px;">${msg}</div>`;
       } catch (err) {
-        showResult('err', err.message || '連線發生問題');
+        $('chgMsg').textContent = err.message;
+        $('chgMsg').style.color = 'var(--err)';
+        $('btnApplyChange').disabled = false;
+      }
+    });
+  }
+
+  if (act === 'note') {
+    slot.innerHTML = `
+      <div class="inline-panel">
+        <label>備注（會寫入 Google Sheets，跟著這位社員）</label>
+        <textarea id="noteText" rows="2" placeholder="例：已私下轉帳、下次補收據…"></textarea>
+        <button class="btn" id="btnSaveNote">儲存備注</button>
+        <div class="detail" id="noteMsg" style="margin-top:8px;"></div>
+      </div>`;
+    $('btnSaveNote').addEventListener('click', async () => {
+      const note = $('noteText').value.trim();
+      if (!note) return;
+      $('btnSaveNote').disabled = true;
+      try {
+        await callAPI('addNote', { staffPassword, scope: 'member', rowIndex: m.rowIndex, note });
+        toast('備注已儲存');
+        await refreshRoster();
+      } catch (err) {
+        $('noteMsg').textContent = err.message;
+        $('noteMsg').style.color = 'var(--err)';
+        $('btnSaveNote').disabled = false;
       }
     });
   }
 }
 
-function renderConfirmResult(data) {
-  if (data.status === 'error') {
-    showResult('err', data.message);
-    return;
+// 收款（名單列與現場報名共用）
+async function doConfirm(m, slot, afterDone) {
+  slot.innerHTML = '<div class="loading"><div class="spinner"></div>確認收款中...</div>';
+  try {
+    const r = await callAPI('confirm', { staffPassword, rowIndex: m.rowIndex });
+    slot.innerHTML = `
+      <div class="status ok" style="margin-top:10px;"><span>✓</span>收款完成</div>
+      <div class="detail" style="text-align:center;">
+        <b>${r.memberName}</b> 已繳交 ${formatMoney(r.fee)}<br>${r.receiptItem}
+      </div>
+      <div class="code-box">
+        <div class="code">${r.code}</div>
+        <div class="hint">社員的簽到頁面會自動跳出收據，不用報這組碼。<br>（網路不順時才需要口頭告知備用）</div>
+      </div>
+      <label>這筆收款的備注（選填）</label>
+      <textarea id="payNote" rows="2" placeholder="例：找零 $50、朋友代付…"></textarea>
+      <button class="btn secondary" id="btnPayNote">存備注並完成</button>
+    `;
+    $('btnPayNote').addEventListener('click', async () => {
+      const note = $('payNote').value.trim();
+      if (note) {
+        try { await callAPI('addNote', { staffPassword, scope: 'record', code: r.code, note }); } catch(e) {}
+      }
+      toast('已完成');
+      if (afterDone) afterDone(); else { await refreshRoster(); }
+    });
+  } catch (err) {
+    slot.innerHTML = `<div class="detail" style="color:var(--err); margin-top:8px;">${err.message}</div>`;
   }
-
-  $('resultContent').innerHTML = `
-    <div class="status ok"><span>✓</span>收款完成</div>
-    <div class="detail" style="text-align:center;">
-      <b>${data.memberName}</b> 已繳交 ${formatMoney(data.fee)}<br>
-      品名：${data.receiptItem}
-    </div>
-    <div class="code-box">
-      <div class="code">${data.code}</div>
-      <div class="hint">請口頭告知社員此 6 位密碼</div>
-    </div>
-    <button class="btn secondary" onclick="resetAll()">下一筆</button>
-  `;
 }
 
-// 手動代簽
-$('btnManual').addEventListener('click', async () => {
-  const staffPassword = $('staffPassword').value.trim();
-  const name = $('mName').value.trim();
-  const last4 = $('mLast4').value.trim();
-  const identity = $('mIdentity').value;
-  const memberType = $('mMemberType').value;
+async function refreshRoster() {
+  const data = await callAPI('roster', { staffPassword });
+  rosterData = data;
+  $('courseInfo').innerHTML = `${data.course.name}<span>${data.course.date} ・ ${data.members.filter(m=>m.relevant).length} 人今日相關</span>`;
+  renderMemberList();
+}
 
-  if (!staffPassword || !name || !/^\d{4}$/.test(last4)) {
-    showResult('err', '請輸入完整資料');
-    return;
-  }
-
-  $('btnManual').disabled = true;
-  $('resultCard').classList.add('show');
-  $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>處理中...</div>';
-
-  try {
-    const data = await callAPI('manualCheckin', { staffPassword, name, phone: '0000' + last4, identity, memberType });
-    if (data.needPayment) {
-      // 需要繳費，轉到定位收款流程
-      renderLocateResult({
-        status: 'ok',
-        member: { name, identity, memberType, phoneLast4: last4 },
-        course: data.course,
-        fee: data.fee,
-        receiptItem: data.receiptItem
-      }, staffPassword, last4);
-    } else {
-      showResult('ok', `${name} 代簽到成功，本堂無需繳費。`);
-    }
-  } catch (err) {
-    showResult('err', err.message || '連線發生問題');
-  } finally {
-    $('btnManual').disabled = false;
-  }
+$('btnRefresh').addEventListener('click', async () => {
+  try { await refreshRoster(); toast('已重新整理'); } catch(e) { toast(e.message, true); }
 });
 
-// 同步報名名單（從表單回覆表拉最新資料）
 $('btnSync').addEventListener('click', async () => {
-  const staffPassword = $('staffPassword').value.trim();
-  if (!staffPassword) {
-    showResult('err', '請先輸入幹部密碼');
-    return;
-  }
-  $('btnSync').disabled = true;
-  $('resultCard').classList.add('show');
-  $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>同步中...</div>';
   try {
     const data = await callAPI('syncNow', { staffPassword });
-    const parts = [`新增 ${data.created} 筆`, `更新 ${data.updated} 筆`];
-    if (data.errors) parts.push(`失敗 ${data.errors} 筆`);
-    showResult('ok', `同步完成：${parts.join('、')}。`);
+    toast(`同步完成：新增 ${data.created}、更新 ${data.updated}`);
+    await refreshRoster();
+  } catch (e) { toast(e.message, true); }
+});
+
+// ===== 現場報名 =====
+$('btnWalkin').addEventListener('click', async () => {
+  const name = $('wName').value.trim();
+  const phone = $('wPhone').value.replace(/\D/g, '');
+  if (!name || phone.length < 9) { toast('請輸入姓名與完整電話', true); return; }
+  $('btnWalkin').disabled = true;
+  try {
+    const r = await callAPI('walkin', {
+      staffPassword, name, phone,
+      identity: $('wIdentity').value, memberType: $('wMemberType').value
+    });
+    const m = r.member;
+    let html = `
+      <div class="card">
+        <div class="status ok"><span>✓</span>已建立／更新報名</div>
+        <div class="detail"><b>${m.name}</b>（${m.identity === 'student' ? '學生' : '社會人士'}・${m.memberType === 'semester' ? '學期' : '單堂'}）<br>
+        品名：${r.receiptItem}</div>
+        <div style="font-size:30px; font-weight:600; text-align:center; margin:14px 0;">${formatMoney(r.fee)}</div>
+        <div class="panel-slot"></div>
+      </div>`;
+    $('walkinResult').innerHTML = html;
+    const slot = $('walkinResult').querySelector('.panel-slot');
+    if (r.fee > 0) {
+      slot.innerHTML = `<button class="btn" id="btnWalkinPay">確認已收現金 ${formatMoney(r.fee)}</button>`;
+      $('btnWalkinPay').addEventListener('click', async () => {
+        await doConfirm(m, slot, async () => {
+          $('wName').value = ''; $('wPhone').value = '';
+          await refreshRoster();
+        });
+      });
+    } else {
+      slot.innerHTML = `<button class="btn" id="btnWalkinFree">無需繳費，完成簽到</button>`;
+      $('btnWalkinFree').addEventListener('click', async () => {
+        try {
+          await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex });
+          toast(`${m.name} 簽到完成`);
+          $('wName').value = ''; $('wPhone').value = '';
+          $('walkinResult').innerHTML = '';
+          await refreshRoster();
+        } catch (e) { toast(e.message, true); }
+      });
+    }
   } catch (err) {
-    showResult('err', err.message || '同步失敗');
+    toast(err.message, true);
   } finally {
-    $('btnSync').disabled = false;
+    $('btnWalkin').disabled = false;
   }
 });
 
-function showResult(type, message) {
-  const icon = type === 'ok' ? '✓' : '✕';
-  $('resultCard').classList.add('show');
-  $('resultContent').innerHTML = `<div class="status ${type}"><span>${icon}</span>${message}</div>`;
-}
+// ===== 報表 =====
+let reportLoaded = false;
+async function loadReport() {
+  $('reportContent').innerHTML = '<div class="loading"><div class="spinner"></div>載入中...</div>';
+  try {
+    const [stats, fin] = await Promise.all([
+      callAPI('courseStats', { staffPassword }),
+      callAPI('finance', { staffPassword })
+    ]);
 
-function resetAll() {
-  $('last4').value = '';
-  $('resultCard').classList.remove('show');
-  $('resultContent').innerHTML = '';
+    let html = `
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num">${stats.attendedCount}<span style="font-size:14px;color:var(--muted);">/${stats.expectedCount}</span></div><div class="lbl">已到 / 應到</div></div>
+        <div class="stat-box"><div class="num">${formatMoney(stats.todayTotal)}</div><div class="lbl">本堂收入（${stats.paidCount} 筆）</div></div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-box" style="grid-column:1/3; background:#f0f7ff;"><div class="num" style="color:var(--blue);">${formatMoney(fin.semesterTotal)}</div><div class="lbl">${fin.semester} 學期累計收入</div></div>
+      </div>
+    `;
+
+    if (stats.unpaid.length > 0) {
+      html += `<h3 class="sec">尚未繳費（${stats.unpaid.length} 人）</h3><div class="card mini-list">`;
+      stats.unpaid.forEach(u => {
+        html += `<div class="mini-item"><span>${u.name}（${u.memberType === 'semester' ? '學期' : '單堂'}・${u.identity === 'student' ? '學生' : '社會'}）</span><span class="r">${formatMoney(u.fee)}</span></div>`;
+      });
+      html += '</div>';
+    }
+
+    if (fin.today.payments.length > 0) {
+      html += `<h3 class="sec">本堂入帳明細</h3><div class="card mini-list">`;
+      fin.today.payments.forEach(p => {
+        html += `<div class="mini-item"><span>${fmtTime(p.time)} ${p.name}${p.note ? '（注：' + p.note + '）' : ''}<br><span style="font-size:12px;color:var(--muted);">${p.item}</span></span><span class="r">${formatMoney(p.fee)}</span></div>`;
+      });
+      html += '</div>';
+    }
+
+    if (fin.byItem.length > 0) {
+      html += `<h3 class="sec">本學期收入（分品名）</h3><div class="card mini-list">`;
+      fin.byItem.forEach(it => {
+        html += `<div class="mini-item"><span>${it.item}</span><span class="r">${it.count} 筆 ・ ${formatMoney(it.total)}</span></div>`;
+      });
+      html += '</div>';
+    }
+
+    html += `<h3 class="sec">今日出席（${stats.attendedCount} 人）</h3><div class="card mini-list">`;
+    if (stats.attended.length === 0) {
+      html += '<div class="detail">尚無出席紀錄。</div>';
+    } else {
+      stats.attended.forEach(a => {
+        html += `<div class="mini-item"><span>${a.name}</span><span class="r">${fmtTime(a.time)}</span></div>`;
+      });
+    }
+    html += '</div>';
+
+    $('reportContent').innerHTML = html;
+    reportLoaded = true;
+  } catch (err) {
+    $('reportContent').innerHTML = `<div class="card"><div class="status err"><span>✕</span>${err.message}</div></div>`;
+  }
 }
 </script>
 </body>

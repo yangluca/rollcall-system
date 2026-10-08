@@ -38,15 +38,22 @@
   .fee-box{background:#fafafa; border-radius:12px; padding:16px; margin:16px 0; text-align:center;}
   .fee-box .amount{font-size:36px; font-weight:600; color:var(--fg);}
   .fee-box .unit{font-size:14px; color:var(--muted); margin-top:4px;}
+  .waiting{background:#f0f7ff; border:2px solid var(--blue); border-radius:12px; padding:20px; text-align:center; margin:16px 0;}
+  .waiting .msg{font-size:15px; font-weight:600; color:var(--blue); margin-top:10px;}
+  .waiting .sub{font-size:13px; color:var(--muted); margin-top:6px; line-height:1.5;}
   .history{margin-top:20px;}
   .history h3{font-size:14px; color:var(--muted); margin:0 0 12px; font-weight:500;}
-  .history-item{padding:12px 0; border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;}
+  .history-item{padding:12px 0; border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; text-decoration:none; color:inherit;}
   .history-item:first-child{border-top:none;}
   .history-item .info{font-size:15px;}
   .history-item .tag{font-size:12px; padding:4px 10px; background:var(--line); border-radius:20px; color:var(--muted);}
   .loading{text-align:center; color:var(--muted); padding:40px 0;}
   .spinner{width:28px; height:28px; border:2px solid var(--line); border-top-color:var(--fg); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 12px;}
+  .spinner.blue{border-color:#cfe0f7; border-top-color:var(--blue); width:34px; height:34px;}
   @keyframes spin{to{transform:rotate(360deg);}}
+  .manual-toggle{display:block; width:100%; text-align:center; background:none; border:none; color:var(--muted); font-size:13px; text-decoration:underline; cursor:pointer; margin-top:14px; padding:6px; font-family:inherit;}
+  .manual-area{display:none; margin-top:8px;}
+  .manual-area.show{display:block;}
   footer{margin-top:auto; padding-top:24px; text-align:center; font-size:12px; color:var(--muted);}
 </style>
 </head>
@@ -54,15 +61,15 @@
 <div class="wrap">
   <header>
     <h1>師大影像藝術創作社</h1>
-    <div class="subtitle">輸入姓名與電話末四碼進行社課簽到，幹部收現金後會提供領收據密碼。</div>
+    <div class="subtitle">輸入姓名與電話進行社課簽到。需要繳費的話，到櫃檯付現後此頁面會自動跳出收據。</div>
   </header>
 
   <div class="card" id="formCard">
     <label for="name">姓名</label>
     <input type="text" id="name" placeholder="輸入報名姓名" autocomplete="name">
 
-    <label for="last4" style="margin-top:16px;">電話末四碼</label>
-    <input type="tel" id="last4" placeholder="0000" maxlength="4" inputmode="numeric" pattern="[0-9]{4}">
+    <label for="phone" style="margin-top:16px;">電話（全碼，不用國碼）</label>
+    <input type="tel" id="phone" placeholder="0912345678" maxlength="12" inputmode="tel" autocomplete="tel">
 
     <button class="btn" id="btnCheckin">查詢簽到狀態</button>
   </div>
@@ -77,7 +84,6 @@
 </div>
 
 <script>
-// TODO: 更換成部署後的 GAS Web App URL
 const API_URL = 'https://script.google.com/macros/s/AKfycbyyCMJBLqtjN8rUH6i-IDOrmVyWPpTt99D1_zNDrCOwbbisi6jjlOhPEaIa6VPgV8fN/exec';
 
 // 現場臨時來的人：沒報名時引導到報名表單
@@ -131,12 +137,17 @@ async function callAPI(action, payload) {
   throw lastErr;
 }
 
+// 電話只留數字即可：0912345678 / 0912-345-678 / +886 912345678 後端都能辨識
+function normalizeInputPhone(raw) {
+  return String(raw || '').replace(/\D/g, '');
+}
+
 $('btnCheckin').addEventListener('click', async () => {
   const name = $('name').value.trim();
-  const last4 = $('last4').value.trim();
+  const phone = normalizeInputPhone($('phone').value);
 
-  if (!name || !/^\d{4}$/.test(last4)) {
-    showResult('err', '請輸入完整姓名與 4 位數字');
+  if (!name || phone.length < 9) {
+    showResult('err', '請輸入完整姓名與電話（10 碼）');
     return;
   }
 
@@ -145,8 +156,8 @@ $('btnCheckin').addEventListener('click', async () => {
   $('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div>查詢中...</div>';
 
   try {
-    const data = await callAPI('checkin', { name, last4 });
-    renderResult(data);
+    const data = await callAPI('checkin', { name, phone });
+    renderResult(data, name, phone);
   } catch (err) {
     const msg = err.message || '連線發生問題，請確認網路後再試';
     showResult('err', msg, msg.indexOf('找不到報名資料') !== -1);
@@ -161,21 +172,48 @@ function showResult(type, message, withSignup) {
   let html = `<div class="status ${type}"><span>${icon}</span>${message}</div>`;
   if (withSignup) {
     html += `
-      <div class="detail" style="margin-bottom:14px;">現場臨時來的嗎？<b>請先填寫報名表單</b>，填完就能馬上回來簽到。</div>
+      <div class="detail" style="margin-bottom:14px;">現場臨時來的嗎？<b>請直接找櫃檯幹部</b>，報名和簽到一次幫你處理好；或先填寫報名表單再回來簽到。</div>
       <a class="btn" href="${SIGNUP_URL}" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none;">填寫報名表單 →</a>
     `;
   }
   $('resultContent').innerHTML = html;
 }
 
-function renderResult(data) {
+// ===== 等待收款：每 4 秒輪詢，幹部確認後自動跳轉收據 =====
+let pollTimer = null;
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function startPolling(name, phone) {
+  stopPolling();
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await callAPI('pollCode', { name, phone });
+      if (r.code) {
+        stopPolling();
+        window.location.href = `receipt.html?code=${encodeURIComponent(r.code)}`;
+      }
+    } catch (e) {
+      // 輪詢失敗（網路抖動）靜默跳過，下一輪再試
+    }
+  }, 4000);
+}
+
+window.addEventListener('pagehide', stopPolling);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopPolling();
+});
+
+function renderResult(data, name, phone) {
   if (data.status === 'error') {
     const msg = String(data.message || '');
     showResult('err', msg, msg.indexOf('找不到報名資料') !== -1);
     return;
   }
 
-  const memberName = (data.member && data.member.name) || data.name || '同學';
+  const memberName = data.name || '同學';
   const courseName = (data.course && data.course.name) || '';
 
   if (data.checkedIn) {
@@ -184,15 +222,15 @@ function renderResult(data) {
       <div class="status ok"><span>✓</span>簽到成功</div>
       <div class="detail">
         <b>${memberName}</b>您已完成今日 <b>${courseName}</b> 簽到。<br>
-        ${data.fee === 0 ? '本堂無需繳費。' : ''}
+        本堂無需繳費。
       </div>
     `;
 
     if (data.history && data.history.length > 0) {
-      html += '<div class="history"><h3>歷史收據</h3>';
+      html += '<div class="history"><h3>歷史收據（點擊可補領）</h3>';
       data.history.forEach(h => {
         html += `
-          <div class="history-item">
+          <a class="history-item" href="receipt.html?code=${encodeURIComponent(h.code)}">
             <div class="info">
               <div><b>${h.receiptItem || ''}</b></div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">${h.courseDate || ''}</div>
@@ -200,7 +238,7 @@ function renderResult(data) {
             <div>
               <span class="tag">${formatMoney(h.fee)}</span>
             </div>
-          </div>
+          </a>
         `;
       });
       html += '</div>';
@@ -208,26 +246,39 @@ function renderResult(data) {
 
     $('resultContent').innerHTML = html;
   } else {
-    // 需要繳費 → 提示櫃檯繳現金，並提供手動輸入 6 位碼入口
+    // 需要繳費 → 進入等待模式：幹部確認收款後自動跳轉收據
     $('resultContent').innerHTML = `
       <div class="status pay"><span>$</span>需要繳費</div>
-      <div class="detail">
-        <b>${memberName}</b>請到櫃檯繳交現金，幹部確認後會提供 6 位領收據密碼。
-      </div>
       <div class="fee-box">
         <div class="amount">${formatMoney(data.fee)}</div>
         <div class="unit">${data.receiptItem}</div>
       </div>
-      <label for="receiptCode" style="margin-top:12px;">6 位領收據密碼</label>
-      <input type="tel" id="receiptCode" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}">
-      <button class="btn" id="btnGoReceipt">前往領取收據 →</button>
+      <div class="waiting">
+        <div class="spinner blue"></div>
+        <div class="msg">等待幹部確認收款中</div>
+        <div class="sub">請到櫃檯付現 <b>${formatMoney(data.fee)}</b>，幹部確認後<br>此頁面會自動跳出收據，不用輸入任何密碼。</div>
+      </div>
+      <button class="manual-toggle" id="btnManualCode">網路不好？改用手動輸入密碼</button>
+      <div class="manual-area" id="manualArea">
+        <label for="receiptCode">6 位領收據密碼</label>
+        <input type="tel" id="receiptCode" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}">
+        <button class="btn" id="btnGoReceipt">前往領取收據 →</button>
+      </div>
     `;
+
+    // 開始輪詢
+    startPolling(name, phone);
+
+    $('btnManualCode').addEventListener('click', () => {
+      $('manualArea').classList.toggle('show');
+    });
     $('btnGoReceipt').addEventListener('click', () => {
       const code = $('receiptCode').value.trim();
       if (!/^\d{6}$/.test(code)) {
         showResult('err', '請輸入幹部提供的 6 位密碼');
         return;
       }
+      stopPolling();
       window.location.href = `receipt.html?code=${encodeURIComponent(code)}`;
     });
   }

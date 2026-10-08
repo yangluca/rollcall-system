@@ -1,6 +1,13 @@
 /**
  * 師大影像藝術創作社 · 點名繳費收據系統
  * Google Apps Script 後端
+ *
+ * v2.0（2026-10-08）重點：
+ * 1. 電話正規化 normalizePhone：0912345678 / 912345678 / 0912-345-678 / +886 912345678 都能對到同一人
+ * 2. 修復 asText 單引號 bug：經 API 寫入的 "'" 前綴會變字面值，導致 pollCode / 歷史收據 / 防重複簽到全部比對失敗
+ * 3. 收據 code 不再設 30 分鐘期限，社員端改為輪詢自動跳轉
+ * 4. 新 API：roster / walkin / updateMember / markAttendance / addNote / courseStats / finance
+ * 5. 單堂轉學期全額折抵（calculateFee 內建）
  */
 
 // ============ 設定 ============
@@ -15,9 +22,13 @@ const SHEET_NAMES = {
   ATTENDANCE: 'attendance'
 };
 
+// members 欄位：A name | B phone | C email | D identity | E memberType | F paidSemester | G enrolledCourses | H locked | I note
+// records 欄位：A timestamp | B courseDate | C courseName | D name | E phoneLast4 | F identity | G memberType | H fee | I paid | J code | K receiptItem | L receiptImageUrl | M note
+// attendance 欄位：A timestamp | B courseDate | C courseName | D name | E phoneLast4 | F memberType | G identity | H note
+
 // ============ Web App 入口 ============
 function doGet(e) {
-  return jsonResponse({ status: 'ok', message: 'Rollcall API is running' });
+  return jsonResponse({ status: 'ok', message: 'Rollcall API is running', version: '2.0' });
 }
 
 function doPost(e) {
@@ -48,6 +59,21 @@ function doPost(e) {
         return pollCode(data);
       case 'syncNow':
         return syncNowAction(data);
+      // v2.0 新增
+      case 'roster':
+        return roster(data);
+      case 'walkin':
+        return walkin(data);
+      case 'updateMember':
+        return updateMember(data);
+      case 'markAttendance':
+        return markAttendance(data);
+      case 'addNote':
+        return addNote(data);
+      case 'courseStats':
+        return courseStats(data);
+      case 'finance':
+        return finance(data);
       default:
         return jsonResponse({ status: 'error', message: '未知動作: ' + action }, 400);
     }
@@ -93,7 +119,6 @@ function getConfig() {
 function getActiveCourse() {
   const sheet = getSheet(SHEET_NAMES.COURSES);
   const rows = sheet.getDataRange().getValues();
-  const headers = rows[0];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -128,7 +153,7 @@ function parseDateValue(raw) {
   if (raw instanceof Date) {
     d = new Date(raw.getTime());
   } else {
-    d = new Date(raw);
+    d = new Date(String(raw).replace(/^'/, '')); // 去掉可能殘留的 asText 單引號
   }
   if (isNaN(d.getTime())) return null;
   if (d.getFullYear() <= 200) {
@@ -159,15 +184,38 @@ function getSemesterName(date) {
 }
 
 function phoneLast4(phone) {
-  const s = String(phone).replace(/\D/g, '');
+  const s = String(phone == null ? '' : phone).replace(/\D/g, '');
   return s.slice(-4);
 }
 
-// Sheets 會把「看起來像數字」的字串自動轉成數字，導致電話開頭 0 消失
-// （0912345678 → 912345678）。寫入時加單引號前綴可強制存成文字（單引號不會顯示、讀取時也不含）。
-function asText(v) {
-  const s = String(v == null ? '' : v).trim();
-  return s === '' ? '' : "'" + s;
+// 電話正規化：只留數字 → 去 886 國碼 → 去開頭 0 → 台灣手機 9 碼
+// 0912345678 → 912345678
+// 912345678 → 912345678
+// 0912-345-678 → 912345678
+// +886 912345678 → 912345678
+// （也相容 Sheets 把開頭 0 吃掉後的 912345678 數字、以及 asText 殘留的單引號）
+function normalizePhone(p) {
+  let d = String(p == null ? '' : p).replace(/\D/g, '');
+  if (d.indexOf('886') === 0 && d.length >= 11) d = d.slice(3);
+  while (d.charAt(0) === '0' && d.length > 9) d = d.slice(1);
+  return d;
+}
+
+// 電話比對：輸入 ≥9 碼時全碼比對；不足 9 碼（例如末四碼）用末碼比對
+function phonesMatch(stored, input) {
+  const a = normalizePhone(stored);
+  const b = normalizePhone(input);
+  if (!a || !b) return false;
+  if (b.length >= 9) return a === b;
+  return a.slice(-b.length) === b;
+}
+
+// 寫入 members 用的電話格式：統一成 10 碼「0xxxxxxxxx」字串
+// （欄位格式由 setupV2 設為純文字，不再用 asText 單引號——API 寫入時單引號會變字面值）
+function phoneToStore(p) {
+  const n = normalizePhone(p);
+  if (n.length === 9) return '0' + n;
+  return String(p == null ? '' : p).trim();
 }
 
 // 寬鬆的真值判斷（Sheets 讀回可能是 boolean / 'TRUE' / 1 / 'Y'）
@@ -187,24 +235,29 @@ function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// ============ 社員查找 ============
+function rowToMember(row, rowIndex) {
+  return {
+    rowIndex: rowIndex,
+    name: row[0],
+    phone: row[1],
+    email: row[2],
+    identity: row[3] || 'student',
+    memberType: row[4] || 'single',
+    paidSemester: isTrue(row[5]),
+    enrolledCourses: row[6] || '',
+    locked: isTrue(row[7]),
+    note: row[8] || ''
+  };
+}
+
 function findMemberByPhone(phone) {
   const sheet = getSheet(SHEET_NAMES.MEMBERS);
   const rows = sheet.getDataRange().getValues();
-  const headers = rows[0];
-  const target = phoneLast4(phone);
 
   for (let i = 1; i < rows.length; i++) {
-    if (phoneLast4(rows[i][1]) === target) {
-      return {
-        rowIndex: i + 1,
-        name: rows[i][0],
-        phone: rows[i][1],
-        email: rows[i][2],
-        identity: rows[i][3] || 'student',
-        memberType: rows[i][4] || 'single',
-        paidSemester: rows[i][5] === true || rows[i][5] === 'TRUE' || rows[i][5] === 'true',
-        enrolledCourses: rows[i][6] || ''
-      };
+    if (phonesMatch(rows[i][1], phone)) {
+      return rowToMember(rows[i], i + 1);
     }
   }
   return null;
@@ -213,49 +266,75 @@ function findMemberByPhone(phone) {
 function findMemberByLast4(last4) {
   const sheet = getSheet(SHEET_NAMES.MEMBERS);
   const rows = sheet.getDataRange().getValues();
+  const target = phoneLast4(last4);
 
   for (let i = 1; i < rows.length; i++) {
-    if (phoneLast4(rows[i][1]) === last4) {
-      return {
-        rowIndex: i + 1,
-        name: rows[i][0],
-        phone: rows[i][1],
-        email: rows[i][2],
-        identity: rows[i][3] || 'student',
-        memberType: rows[i][4] || 'single',
-        paidSemester: rows[i][5] === true || rows[i][5] === 'TRUE' || rows[i][5] === 'true',
-        enrolledCourses: rows[i][6] || ''
-      };
+    if (phoneLast4(rows[i][1]) === target) {
+      return rowToMember(rows[i], i + 1);
     }
   }
   return null;
 }
 
-function calculateFee(member, course) {
-  const config = getConfig();
+// 幹部操作用：名單回傳的 rowIndex 直接定位（避免末四碼撞號收錯人）
+function findMemberByRow(rowIndex) {
+  const sheet = getSheet(SHEET_NAMES.MEMBERS);
+  const idx = parseInt(rowIndex, 10);
+  if (!idx || idx < 2 || idx > sheet.getLastRow()) return null;
+  const row = sheet.getRange(idx, 1, 1, 9).getValues()[0];
+  if (!row[0] && !row[1]) return null;
+  return rowToMember(row, idx);
+}
+
+// 幹部操作時的社員定位：優先 rowIndex → 全電話 → 末四碼
+function resolveMember(data) {
+  if (data.rowIndex) {
+    const m = findMemberByRow(data.rowIndex);
+    if (m) return m;
+  }
+  if (data.phone) return findMemberByPhone(data.phone);
+  if (data.last4) return findMemberByLast4(data.last4);
+  return null;
+}
+
+// ============ 費用計算 ============
+// 一次讀取 records，避免名單模式逐人重讀試算表
+function buildFeeContext() {
+  return {
+    config: getConfig(),
+    recordRows: getSheet(SHEET_NAMES.RECORDS).getDataRange().getValues()
+  };
+}
+
+function calculateFee(member, course, ctx) {
+  ctx = ctx || buildFeeContext();
+  const config = ctx.config;
   const semester = getSemesterName(course.date);
 
   if (member.memberType === 'semester') {
     // 學期社員：今學年度已繳費了嗎？
-    if (hasPaidSemester(member.phone, semester)) {
-      return { fee: 0, item: course.receiptItem, type: 'semester_paid' };
+    if (hasPaidSemester(member.phone, semester, ctx.recordRows)) {
+      return { fee: 0, item: course.receiptItem, type: 'semester_paid', credit: 0 };
     }
-    const fee = member.identity === 'student' ? config.studentSemesterFee : config.publicSemesterFee;
-    return { fee: fee, item: `${semester} 學期社費`, type: 'semester_first' };
+    const fullFee = Number(member.identity === 'student' ? config.studentSemesterFee : config.publicSemesterFee) || 0;
+    // 單堂轉學期：本學期已繳的單堂費全額折抵
+    const credit = singleCourseCredit(member.phone, semester, ctx.recordRows);
+    const fee = Math.max(0, fullFee - credit);
+    const item = credit > 0 ? `${semester} 學期社費（已折抵單堂 $${credit}）` : `${semester} 學期社費`;
+    return { fee: fee, item: item, type: 'semester_first', credit: credit };
   } else {
     // 單堂社員：今天這堂課是否已繳過費？（跨堂獨立、同堂去重）
     const todayKey = monthDayKey(course.date);
-    if (hasPaidSingleCourse(member.phone, todayKey)) {
-      return { fee: 0, item: course.receiptItem, type: 'single_paid' };
+    if (hasPaidSingleCourse(member.phone, todayKey, ctx.recordRows)) {
+      return { fee: 0, item: course.receiptItem, type: 'single_paid', credit: 0 };
     }
-    const fee = member.identity === 'student' ? config.studentSingleFee : config.publicSingleFee;
-    return { fee: fee, item: course.receiptItem, type: 'single' };
+    const fee = Number(member.identity === 'student' ? config.studentSingleFee : config.publicSingleFee) || 0;
+    return { fee: fee, item: course.receiptItem, type: 'single', credit: 0 };
   }
 }
 
-function hasPaidSemester(phone, semester) {
-  const sheet = getSheet(SHEET_NAMES.RECORDS);
-  const rows = sheet.getDataRange().getValues();
+function hasPaidSemester(phone, semester, recordRows) {
+  const rows = recordRows || getSheet(SHEET_NAMES.RECORDS).getDataRange().getValues();
 
   for (let i = 1; i < rows.length; i++) {
     if (phoneLast4(rows[i][4]) === phoneLast4(phone) && rows[i][6] === 'semester') {
@@ -268,26 +347,41 @@ function hasPaidSemester(phone, semester) {
 }
 
 // 單堂社員：判斷「今天這堂課」是否已繳費（用月/日比對，跨堂獨立、同堂去重）
-function hasPaidSingleCourse(phone, dateKey) {
-  const sheet = getSheet(SHEET_NAMES.RECORDS);
-  const rows = sheet.getDataRange().getValues();
+function hasPaidSingleCourse(phone, dateKey, recordRows) {
+  const rows = recordRows || getSheet(SHEET_NAMES.RECORDS).getDataRange().getValues();
 
   for (let i = 1; i < rows.length; i++) {
     if (phoneLast4(rows[i][4]) === phoneLast4(phone) && rows[i][6] === 'single') {
-      const paid = rows[i][8] === true || rows[i][8] === 'TRUE' || rows[i][8] === 'true';
+      const paid = isTrue(rows[i][8]);
       if (paid && monthDayKey(rows[i][1]) === dateKey) return true;
     }
   }
   return false;
 }
 
+// 本學期已繳的單堂費總額（單堂轉學期時全額折抵用）
+function singleCourseCredit(phone, semester, recordRows) {
+  const rows = recordRows || getSheet(SHEET_NAMES.RECORDS).getDataRange().getValues();
+  let sum = 0;
+
+  for (let i = 1; i < rows.length; i++) {
+    if (phoneLast4(rows[i][4]) === phoneLast4(phone) && rows[i][6] === 'single' && isTrue(rows[i][8])) {
+      const d = parseDateValue(rows[i][1]);
+      if (d && getSemesterName(d) === semester) {
+        sum += Number(rows[i][7]) || 0;
+      }
+    }
+  }
+  return sum;
+}
+
 // 各種日期格式統一成「月/日」（無前導零），例如 10/8、12/3
-// 支援：「2026-10-08」（formatDate）、「10/08（四）｜…」（報名堂次）、Date 物件
+// 支援：「2026-10-08」（formatDate）、「10/08（四）｜…」（報名堂次）、Date 物件、殘留單引號
 function monthDayKey(input) {
   if (input instanceof Date) {
     return `${input.getMonth() + 1}/${input.getDate()}`;
   }
-  const s = String(input || '').trim();
+  const s = String(input || '').replace(/^'/, '').trim();
   let m = s.match(/(\d{1,2})\/(\d{1,2})/);
   if (m) return `${parseInt(m[1])}/${parseInt(m[2])}`;
   m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -309,7 +403,6 @@ function parseEnrolledDates(text) {
 }
 
 // 合併兩串「月/日」堂次：聯集、去重、按日期排序
-// 用途：同一個人再次填表單加報新堂次時，不能覆蓋掉先前已報名的堂次
 function mergeEnrolled(oldStr, newStr) {
   const seen = {};
   const add = s => {
@@ -337,7 +430,7 @@ function upsertMember(member) {
     // 更新姓名/電話/email/身分/類型（A~E），保留 paidSemester（F 欄）不動
     sheet.getRange(existing.rowIndex, 1, 1, 5).setValues([[
       member.name,
-      asText(member.phone),
+      phoneToStore(member.phone),
       member.email,
       member.identity,
       member.memberType
@@ -349,7 +442,7 @@ function upsertMember(member) {
     // 新增
     const newRow = [
       member.name,
-      asText(member.phone),
+      phoneToStore(member.phone),
       member.email,
       member.identity,
       member.memberType,
@@ -377,59 +470,32 @@ function fixPaidSemesterColumn() {
   return jsonResponse({ status: 'ok', fixed: fixed });
 }
 
+// ============ 繳費紀錄（records）============
 function addRecord(record) {
   const sheet = getSheet(SHEET_NAMES.RECORDS);
   sheet.appendRow([
     new Date(),
-    asText(record.courseDate),
+    record.courseDate,
     record.courseName,
     record.name,
-    asText(record.phoneLast4),
+    phoneLast4(record.phoneLast4 || record.phone),
     record.identity,
     record.memberType,
     record.fee,
     record.paid,
     record.code || '',
     record.receiptItem || '',
-    record.receiptImageUrl || ''
+    record.receiptImageUrl || '',
+    record.note || ''
   ]);
 }
 
-// ============ 出席紀錄（與繳費紀錄分離）============
-// records 只放「繳費／收據」資料，避免簽到紀錄污染對帳；
-// 「誰來過」記在 attendance。
-const ATTENDANCE_HEADERS = ['timestamp', 'courseDate', 'courseName', 'name', 'phoneLast4', 'memberType', 'identity'];
-
-function addAttendance(rec) {
-  const sheet = getOrCreateSheet(SHEET_NAMES.ATTENDANCE, ATTENDANCE_HEADERS);
-  sheet.appendRow([
-    new Date(),
-    asText(rec.courseDate),
-    rec.courseName,
-    rec.name,
-    asText(rec.phoneLast4),
-    rec.memberType,
-    rec.identity
-  ]);
-}
-
-// 同一個人同一堂是否已有出席紀錄（避免重複簽到產生多筆）
-function hasAttendance(last4, courseDate) {
-  const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
-  if (!sheet) return false;
-  const rows = sheet.getDataRange().getValues();
-  const key = monthDayKey(courseDate);
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][4]) === String(last4) && monthDayKey(rows[i][1]) === key) return true;
-  }
-  return false;
-}
-
+// 用 code 找紀錄：從最新往回找（code 為隨機 6 位，只取最新一筆避免歷史碰撞）
 function findRecordByCode(code) {
   const sheet = getSheet(SHEET_NAMES.RECORDS);
   const rows = sheet.getDataRange().getValues();
 
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = rows.length - 1; i >= 1; i--) {
     if (String(rows[i][9]) === String(code)) {
       return {
         rowIndex: i + 1,
@@ -441,10 +507,11 @@ function findRecordByCode(code) {
         identity: rows[i][5],
         memberType: rows[i][6],
         fee: rows[i][7],
-        paid: rows[i][8],
+        paid: isTrue(rows[i][8]),
         code: rows[i][9],
         receiptItem: rows[i][10],
-        receiptImageUrl: rows[i][11]
+        receiptImageUrl: rows[i][11],
+        note: rows[i][12] || ''
       };
     }
   }
@@ -455,20 +522,54 @@ function getMemberHistory(last4) {
   const sheet = getSheet(SHEET_NAMES.RECORDS);
   const rows = sheet.getDataRange().getValues();
   const history = [];
+  const target = phoneLast4(last4);
 
   for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][4]) === String(last4) && rows[i][8] === true) {
+    // 讀取端一律用 phoneLast4 正規化（相容 asText 單引號殘留的舊資料）
+    if (phoneLast4(rows[i][4]) === target && isTrue(rows[i][8]) && rows[i][9]) {
       history.push({
         courseDate: rows[i][1],
         courseName: rows[i][2],
         name: rows[i][3],
         fee: rows[i][7],
         receiptItem: rows[i][10],
-        code: rows[i][9]
+        code: String(rows[i][9])
       });
     }
   }
   return history.sort((a, b) => new Date(b.courseDate) - new Date(a.courseDate));
+}
+
+// ============ 出席紀錄（與繳費紀錄分離）============
+// records 只放「繳費／收據」資料，避免簽到紀錄污染對帳；
+// 「誰來過」記在 attendance。
+const ATTENDANCE_HEADERS = ['timestamp', 'courseDate', 'courseName', 'name', 'phoneLast4', 'memberType', 'identity', 'note'];
+
+function addAttendance(rec) {
+  const sheet = getOrCreateSheet(SHEET_NAMES.ATTENDANCE, ATTENDANCE_HEADERS);
+  sheet.appendRow([
+    new Date(),
+    rec.courseDate,
+    rec.courseName,
+    rec.name,
+    phoneLast4(rec.phoneLast4 || rec.phone),
+    rec.memberType,
+    rec.identity,
+    rec.note || ''
+  ]);
+}
+
+// 同一個人同一堂是否已有出席紀錄（避免重複簽到產生多筆）
+function hasAttendance(last4, courseDate) {
+  const sheet = getSheet(SHEET_NAMES.ATTENDANCE);
+  if (!sheet) return false;
+  const rows = sheet.getDataRange().getValues();
+  const key = monthDayKey(courseDate);
+  const target = phoneLast4(last4);
+  for (let i = 1; i < rows.length; i++) {
+    if (phoneLast4(rows[i][4]) === target && monthDayKey(rows[i][1]) === key) return true;
+  }
+  return false;
 }
 
 // ============ API 動作 ============
@@ -520,24 +621,25 @@ function lookupMember(data) {
 }
 
 // 3. 社員簽到（只寫入未繳費紀錄，不產生 code）
+// v2.0：支援全電話（data.phone，正規化比對），相容舊的末四碼（data.last4）
 function checkin(data) {
   const course = getActiveCourse();
   if (!course) {
     return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
   }
 
-  let member = findMemberByLast4(data.last4);
+  let member = data.phone ? findMemberByPhone(data.phone) : findMemberByLast4(data.last4);
   if (!member && tryAutoSync()) {
     // 可能是剛填完報名表單的人 → 即時同步一次再查（現場臨時報名情境）
-    member = findMemberByLast4(data.last4);
+    member = data.phone ? findMemberByPhone(data.phone) : findMemberByLast4(data.last4);
   }
   if (!member) {
     return jsonResponse({ status: 'error', message: '找不到報名資料，請先填寫報名表單' }, 404);
   }
 
-  // 姓名雙重驗證：末四碼之外，還需姓名相符（防末四碼被暴力遍歷洩漏個資）
+  // 姓名雙重驗證：電話之外，還需姓名相符（防電話打錯查到別人）
   if (data.name && !namesMatch(member.name, data.name)) {
-    return jsonResponse({ status: 'error', message: '姓名與末四碼不符，請確認報名資料' }, 404);
+    return jsonResponse({ status: 'error', message: '姓名與電話不符，請確認報名資料' }, 404);
   }
 
   const feeInfo = calculateFee(member, course);
@@ -552,7 +654,7 @@ function checkin(data) {
       course: course,
       fee: feeInfo.fee,
       receiptItem: feeInfo.item,
-      message: '請到櫃檯繳費，幹部會提供領收據密碼'
+      message: '請到櫃檯繳費，幹部確認後此頁面會自動跳轉收據'
     });
   }
 
@@ -605,10 +707,10 @@ function manualCheckin(data) {
     });
   }
 
-  return checkin({ name: data.name, last4: phoneLast4(data.phone) });
+  return checkin({ name: data.name, phone: data.phone });
 }
 
-// 5. 幹部用末四碼定位社員
+// 5. 幹部用末四碼定位社員（保留相容；新後台主要用 roster + rowIndex）
 function locateMember(data) {
   const staff = validateStaff(data.staffPassword);
   if (!staff) {
@@ -620,9 +722,9 @@ function locateMember(data) {
     return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
   }
 
-  const member = findMemberByLast4(data.last4);
+  const member = resolveMember(data);
   if (!member) {
-    return jsonResponse({ status: 'error', message: '找不到該末四碼的報名資料' }, 404);
+    return jsonResponse({ status: 'error', message: '找不到該社員的報名資料' }, 404);
   }
 
   const feeInfo = calculateFee(member, course);
@@ -630,6 +732,7 @@ function locateMember(data) {
   return jsonResponse({
     status: 'ok',
     member: {
+      rowIndex: member.rowIndex,
       name: member.name,
       identity: member.identity,
       memberType: member.memberType,
@@ -639,11 +742,12 @@ function locateMember(data) {
     course: course,
     fee: feeInfo.fee,
     receiptItem: feeInfo.item,
-    feeType: feeInfo.type
+    feeType: feeInfo.type,
+    credit: feeInfo.credit
   });
 }
 
-// 6. 幹部確認收款，產生 code
+// 6. 幹部確認收款，產生 code（同時記出席）
 function confirmPayment(data) {
   const staff = validateStaff(data.staffPassword);
   if (!staff) {
@@ -655,9 +759,9 @@ function confirmPayment(data) {
     return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
   }
 
-  const member = findMemberByLast4(data.last4);
+  const member = resolveMember(data);
   if (!member) {
-    return jsonResponse({ status: 'error', message: '找不到該末四碼的報名資料' }, 404);
+    return jsonResponse({ status: 'error', message: '找不到該社員的報名資料' }, 404);
   }
 
   const feeInfo = calculateFee(member, course);
@@ -680,19 +784,33 @@ function confirmPayment(data) {
     paid: true,
     receiptItem: feeInfo.item,
     code: code,
-    receiptImageBase64: data.receiptImageBase64 || ''
+    note: data.note || ''
   });
+
+  // 收款完成同時記出席
+  const l4 = phoneLast4(member.phone);
+  if (!hasAttendance(l4, course.date)) {
+    addAttendance({
+      courseDate: course.date,
+      courseName: course.name,
+      name: member.name,
+      phoneLast4: l4,
+      memberType: member.memberType,
+      identity: member.identity
+    });
+  }
 
   return jsonResponse({
     status: 'ok',
     code: code,
     memberName: member.name,
     fee: feeInfo.fee,
-    receiptItem: feeInfo.item
+    receiptItem: feeInfo.item,
+    credit: feeInfo.credit
   });
 }
 
-// 7. 社員輸入 code 領收據
+// 7. 社員輸入 code 領收據（v2.0：不再設 30 分鐘期限，可隨時補領）
 function redeemReceipt(data) {
   const record = findRecordByCode(data.code);
   if (!record) {
@@ -701,13 +819,6 @@ function redeemReceipt(data) {
 
   if (!record.paid) {
     return jsonResponse({ status: 'error', message: '此密碼尚未完成繳費' }, 400);
-  }
-
-  // 限時：收款後 30 分鐘內有效，超過請洽幹部重開
-  const ts = new Date(record.timestamp);
-  const ageMin = (Date.now() - ts.getTime()) / 60000;
-  if (isNaN(ageMin) || ageMin > 30) {
-    return jsonResponse({ status: 'error', message: '此收據密碼已過期，請洽幹部' }, 410);
   }
 
   return jsonResponse({
@@ -722,6 +833,17 @@ function redeemReceipt(data) {
       imageUrl: record.receiptImageUrl
     }
   });
+}
+
+// 8. 查詢歷史收據
+function getHistory(data) {
+  const member = findMemberByPhone(data.phone);
+  if (!member) {
+    return jsonResponse({ status: 'error', message: '找不到報名資料' }, 404);
+  }
+
+  const history = getMemberHistory(phoneLast4(member.phone));
+  return jsonResponse({ status: 'ok', history: history });
 }
 
 // 9. 上傳收據圖片到 Google Drive（社員領收據時自動留存，用 code 驗證）
@@ -750,69 +872,508 @@ function uploadReceiptImage(data) {
   return jsonResponse({ status: 'ok', imageUrl: url });
 }
 
-// 8. 查詢歷史收據
-function getHistory(data) {
-  const member = findMemberByPhone(data.phone);
-  if (!member) {
-    return jsonResponse({ status: 'error', message: '找不到報名資料' }, 404);
-  }
-
-  const history = getMemberHistory(phoneLast4(member.phone));
-  return jsonResponse({ status: 'ok', history: history });
-}
-
-// 10. 社員端輪詢：幹部確認收款後，查詢是否已有可領取的 code
+// 10. 社員端輪詢：幹部確認收款後，社員頁面自動拿到 code 跳轉收據
+// v2.0 修復：比對一律用 phoneLast4 正規化（舊資料殘留單引號也能對到）；
+// 只認「今天這堂」的繳費紀錄（code 不設期限後，避免跳到歷史收據）
 function pollCode(data) {
   const course = getActiveCourse();
   if (!course) {
     return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
   }
 
-  const member = findMemberByLast4(data.last4);
+  const member = data.phone ? findMemberByPhone(data.phone) : findMemberByLast4(data.last4);
   if (!member) {
     return jsonResponse({ status: 'error', message: '找不到報名資料' }, 404);
   }
   if (data.name && !namesMatch(member.name, data.name)) {
-    return jsonResponse({ status: 'error', message: '姓名與末四碼不符' }, 404);
+    return jsonResponse({ status: 'error', message: '姓名與電話不符' }, 404);
   }
 
-  const last4 = phoneLast4(member.phone);
+  const l4 = phoneLast4(member.phone);
+  const todayKey = monthDayKey(course.date);
   const sheet = getSheet(SHEET_NAMES.RECORDS);
   const rows = sheet.getDataRange().getValues();
 
-  // 從最新往回找：末四碼相符 + 已繳費 + 有 code + 尚未過期
+  // 從最新往回找：末四碼相符 + 已繳費 + 有 code + 今天這堂
   for (let i = rows.length - 1; i >= 1; i--) {
-    const paid = rows[i][8] === true || rows[i][8] === 'TRUE' || rows[i][8] === 'true';
-    if (String(rows[i][4]) === last4 && paid && rows[i][9]) {
-      const ts = new Date(rows[i][0]);
-      const ageMin = (Date.now() - ts.getTime()) / 60000;
-      if (!isNaN(ageMin) && ageMin <= 30) {
-        return jsonResponse({
-          status: 'ok',
-          code: String(rows[i][9]),
-          name: rows[i][3],
-          fee: rows[i][7]
-        });
+    if (phoneLast4(rows[i][4]) === l4 && isTrue(rows[i][8]) && rows[i][9]
+        && monthDayKey(rows[i][1]) === todayKey) {
+      return jsonResponse({
+        status: 'ok',
+        code: String(rows[i][9]),
+        name: rows[i][3],
+        fee: rows[i][7]
+      });
+    }
+  }
+
+  return jsonResponse({ status: 'ok', code: null });
+}
+
+// ============ v2.0 新 API：幹部後台 ============
+
+// 11. 今日名單：登入後直接顯示，含今日應繳金額、繳費/簽到狀態
+function roster(data) {
+  const staff = validateStaff(data.staffPassword);
+  if (!staff) {
+    return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
+  }
+
+  const course = getActiveCourse();
+  if (!course) {
+    return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
+  }
+
+  const ctx = buildFeeContext();
+  const todayKey = monthDayKey(course.date);
+
+  // 一次讀 attendance，建立今日已簽到的末四碼集合
+  const attendedSet = {};
+  const attSheet = getSheet(SHEET_NAMES.ATTENDANCE);
+  if (attSheet) {
+    const aRows = attSheet.getDataRange().getValues();
+    for (let i = 1; i < aRows.length; i++) {
+      if (monthDayKey(aRows[i][1]) === todayKey) {
+        attendedSet[phoneLast4(aRows[i][4])] = true;
       }
     }
   }
 
-  // 找不到 code：回傳診斷資訊，方便對照 records 分頁實際資料（除錯用）
-  const recent = [];
-  for (let i = Math.max(1, rows.length - 3); i < rows.length; i++) {
-    recent.push({
-      last4: String(rows[i][4] != null ? rows[i][4] : ''),
-      paid: String(rows[i][8] != null ? rows[i][8] : ''),
-      code: String(rows[i][9] != null ? rows[i][9] : '(空)')
+  const sheet = getSheet(SHEET_NAMES.MEMBERS);
+  const rows = sheet.getDataRange().getValues();
+  const list = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    if (!rows[i][0] && !rows[i][1]) continue;
+    const member = rowToMember(rows[i], i + 1);
+    const enrolledKeys = parseEnrolledDates(member.enrolledCourses);
+    // 今日相關：學期社員全體 ＋ 單堂有報今天堂次的人
+    const relevant = member.memberType === 'semester' || enrolledKeys.indexOf(todayKey) !== -1;
+    const feeInfo = calculateFee(member, course, ctx);
+    const l4 = phoneLast4(member.phone);
+
+    list.push({
+      rowIndex: member.rowIndex,
+      name: member.name,
+      phoneLast4: l4,
+      identity: member.identity,
+      memberType: member.memberType,
+      fee: feeInfo.fee,
+      feeType: feeInfo.type,
+      receiptItem: feeInfo.item,
+      credit: feeInfo.credit,
+      attended: !!attendedSet[l4],
+      relevant: relevant,
+      enrolledCourses: member.enrolledCourses,
+      note: member.note
     });
   }
+
+  // 排序：今日相關優先 → 單堂在學期前 → 未繳費優先 → 姓名
+  list.sort((a, b) => {
+    if (a.relevant !== b.relevant) return a.relevant ? -1 : 1;
+    if (a.memberType !== b.memberType) return a.memberType === 'single' ? -1 : 1;
+    const aUnpaid = a.fee > 0 ? 0 : 1;
+    const bUnpaid = b.fee > 0 ? 0 : 1;
+    if (aUnpaid !== bUnpaid) return aUnpaid - bUnpaid;
+    return String(a.name).localeCompare(String(b.name), 'zh-Hant');
+  });
+
   return jsonResponse({
     status: 'ok',
-    code: null,
-    debug: {
-      targetLast4: last4,
-      recordCount: Math.max(0, rows.length - 1),
-      recent: recent
+    staff: staff.name,
+    course: course,
+    todayKey: todayKey,
+    members: list
+  });
+}
+
+// 12. 現場報名＋報到一條龍：建檔/更新 → 回傳今日費用，接著用 confirm 收款
+function walkin(data) {
+  const staff = validateStaff(data.staffPassword);
+  if (!staff) {
+    return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
+  }
+
+  const course = getActiveCourse();
+  if (!course) {
+    return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
+  }
+
+  const name = String(data.name || '').trim();
+  const phoneNorm = normalizePhone(data.phone);
+  const identity = data.identity === 'public' ? 'public' : 'student';
+  const memberType = data.memberType === 'semester' ? 'semester' : 'single';
+
+  if (!name || phoneNorm.length < 9) {
+    return jsonResponse({ status: 'error', message: '請輸入姓名與完整電話（10 碼）' }, 400);
+  }
+
+  const todayKey = monthDayKey(course.date);
+  const sheet = getSheet(SHEET_NAMES.MEMBERS);
+  let member = findMemberByPhone(data.phone);
+
+  if (member) {
+    // 舊社員：以現場資料為準更新，設手動鎖定（避免 syncMembers 用表單舊值蓋回）
+    let enrolled = member.enrolledCourses;
+    if (memberType === 'single') {
+      enrolled = mergeEnrolled(enrolled, todayKey);
+    } else {
+      enrolled = ''; // 學期涵蓋全部，堂次清空
+    }
+    sheet.getRange(member.rowIndex, 1, 1, 8).setValues([[
+      name,
+      phoneToStore(data.phone),
+      member.email,
+      identity,
+      memberType,
+      member.paidSemester,
+      enrolled,
+      true // locked
+    ]]);
+    member = findMemberByRow(member.rowIndex);
+  } else {
+    // 新社員建檔（單堂自動把今天加進報名堂次）
+    const enrolled = memberType === 'single' ? todayKey : '';
+    sheet.appendRow([
+      name,
+      phoneToStore(data.phone),
+      '',
+      identity,
+      memberType,
+      false,
+      enrolled,
+      true, // locked
+      ''    // note
+    ]);
+    member = findMemberByPhone(data.phone);
+  }
+
+  const feeInfo = calculateFee(member, course);
+
+  return jsonResponse({
+    status: 'ok',
+    member: {
+      rowIndex: member.rowIndex,
+      name: member.name,
+      identity: member.identity,
+      memberType: member.memberType,
+      phoneLast4: phoneLast4(member.phone)
+    },
+    course: course,
+    fee: feeInfo.fee,
+    receiptItem: feeInfo.item,
+    feeType: feeInfo.type,
+    credit: feeInfo.credit
+  });
+}
+
+// 13. 變更社員資料：身份（學生/社會）、類型（單堂/學期）
+// 變更後設手動鎖定；回傳新費用（單堂轉學期自動折抵本學期已繳單堂費）
+function updateMember(data) {
+  const staff = validateStaff(data.staffPassword);
+  if (!staff) {
+    return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
+  }
+
+  const course = getActiveCourse();
+  if (!course) {
+    return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
+  }
+
+  const member = resolveMember(data);
+  if (!member) {
+    return jsonResponse({ status: 'error', message: '找不到該社員' }, 404);
+  }
+
+  const oldType = member.memberType;
+  const oldIdentity = member.identity;
+  const identity = (data.identity === 'public' || data.identity === 'student') ? data.identity : oldIdentity;
+  const memberType = (data.memberType === 'semester' || data.memberType === 'single') ? data.memberType : oldType;
+  const todayKey = monthDayKey(course.date);
+
+  let enrolled = member.enrolledCourses;
+  if (memberType === 'single' && oldType !== 'single') {
+    // 學期轉單堂：至少保留今天這堂
+    enrolled = mergeEnrolled(enrolled, todayKey);
+  } else if (memberType === 'semester') {
+    enrolled = ''; // 學期涵蓋全部
+  }
+  // 單堂社員「加收今天這堂」（報了別場、今天突然出現）：把今天加入報名堂次
+  if (data.addToday && memberType === 'single') {
+    enrolled = mergeEnrolled(enrolled, todayKey);
+  }
+
+  const sheet = getSheet(SHEET_NAMES.MEMBERS);
+  sheet.getRange(member.rowIndex, 1, 1, 8).setValues([[
+    member.name,
+    phoneToStore(member.phone),
+    member.email,
+    identity,
+    memberType,
+    member.paidSemester,
+    enrolled,
+    true // locked：幹部手動改過，syncMembers 不再用表單值覆蓋
+  ]]);
+
+  const updated = findMemberByRow(member.rowIndex);
+  const feeInfo = calculateFee(updated, course);
+
+  // 學期轉單堂：已繳學期費的退費由幹部現場人工處理，系統不動舊紀錄
+  const refundHint = (oldType === 'semester' && memberType === 'single')
+    ? '注意：此社員原為學期社員，若已繳學期費，退費差額請現場人工處理並加備注。'
+    : '';
+
+  return jsonResponse({
+    status: 'ok',
+    member: {
+      rowIndex: updated.rowIndex,
+      name: updated.name,
+      identity: updated.identity,
+      memberType: updated.memberType,
+      phoneLast4: phoneLast4(updated.phone)
+    },
+    changed: {
+      identity: oldIdentity !== identity,
+      memberType: oldType !== memberType
+    },
+    course: course,
+    fee: feeInfo.fee,
+    receiptItem: feeInfo.item,
+    feeType: feeInfo.type,
+    credit: feeInfo.credit,
+    refundHint: refundHint
+  });
+}
+
+// 14. 補簽到（免繳費或已繳費社員，幹部直接記出席）
+function markAttendance(data) {
+  const staff = validateStaff(data.staffPassword);
+  if (!staff) {
+    return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
+  }
+
+  const course = getActiveCourse();
+  if (!course) {
+    return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
+  }
+
+  const member = resolveMember(data);
+  if (!member) {
+    return jsonResponse({ status: 'error', message: '找不到該社員' }, 404);
+  }
+
+  const l4 = phoneLast4(member.phone);
+  if (hasAttendance(l4, course.date)) {
+    return jsonResponse({ status: 'ok', already: true, message: member.name + ' 今天已簽到過' });
+  }
+
+  addAttendance({
+    courseDate: course.date,
+    courseName: course.name,
+    name: member.name,
+    phoneLast4: l4,
+    memberType: member.memberType,
+    identity: member.identity
+  });
+
+  return jsonResponse({ status: 'ok', already: false, message: member.name + ' 簽到完成' });
+}
+
+// 15. 備注：scope = member（跟著人，members I 欄）/ attendance（今日出席，H 欄）/ record（繳費紀錄，M 欄，用 code 定位）
+function addNote(data) {
+  const staff = validateStaff(data.staffPassword);
+  if (!staff) {
+    return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
+  }
+
+  const note = String(data.note || '').trim();
+  if (!note) {
+    return jsonResponse({ status: 'error', message: '備注內容不可為空' }, 400);
+  }
+
+  const scope = data.scope || 'member';
+
+  if (scope === 'record') {
+    const record = findRecordByCode(data.code);
+    if (!record) {
+      return jsonResponse({ status: 'error', message: '找不到該筆繳費紀錄' }, 404);
+    }
+    const recSheet = getSheet(SHEET_NAMES.RECORDS);
+    const existing = String(record.note || '').trim();
+    recSheet.getRange(record.rowIndex, 13).setValue(existing ? existing + '；' + note : note);
+    return jsonResponse({ status: 'ok', scope: scope });
+  }
+
+  if (scope === 'attendance') {
+    const course = getActiveCourse();
+    if (!course) {
+      return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
+    }
+    const member = resolveMember(data);
+    if (!member) {
+      return jsonResponse({ status: 'error', message: '找不到該社員' }, 404);
+    }
+    const l4 = phoneLast4(member.phone);
+    const todayKey = monthDayKey(course.date);
+    const attSheet = getSheet(SHEET_NAMES.ATTENDANCE);
+    if (!attSheet) {
+      return jsonResponse({ status: 'error', message: '尚無出席紀錄' }, 404);
+    }
+    const rows = attSheet.getDataRange().getValues();
+    for (let i = rows.length - 1; i >= 1; i--) {
+      if (phoneLast4(rows[i][4]) === l4 && monthDayKey(rows[i][1]) === todayKey) {
+        const existing = String(rows[i][7] || '').trim();
+        attSheet.getRange(i + 1, 8).setValue(existing ? existing + '；' + note : note);
+        return jsonResponse({ status: 'ok', scope: scope });
+      }
+    }
+    return jsonResponse({ status: 'error', message: '該社員今天尚無出席紀錄，請改用「社員備注」' }, 404);
+  }
+
+  // scope === 'member'
+  const member = resolveMember(data);
+  if (!member) {
+    return jsonResponse({ status: 'error', message: '找不到該社員' }, 404);
+  }
+  const memSheet = getSheet(SHEET_NAMES.MEMBERS);
+  const existing = String(member.note || '').trim();
+  memSheet.getRange(member.rowIndex, 9).setValue(existing ? existing + '；' + note : note);
+  return jsonResponse({ status: 'ok', scope: scope });
+}
+
+// 16. 本堂報名情形：應到、已到、未繳費名單、本堂收入
+function courseStats(data) {
+  const staff = validateStaff(data.staffPassword);
+  if (!staff) {
+    return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
+  }
+
+  const course = getActiveCourse();
+  if (!course) {
+    return jsonResponse({ status: 'error', message: '今天沒有開放簽到的社課' }, 400);
+  }
+
+  const ctx = buildFeeContext();
+  const todayKey = monthDayKey(course.date);
+
+  // 今日出席
+  const attended = [];
+  const attendedSet = {};
+  const attSheet = getSheet(SHEET_NAMES.ATTENDANCE);
+  if (attSheet) {
+    const aRows = attSheet.getDataRange().getValues();
+    for (let i = 1; i < aRows.length; i++) {
+      if (monthDayKey(aRows[i][1]) === todayKey) {
+        attended.push({ time: aRows[i][0], name: aRows[i][3], phoneLast4: phoneLast4(aRows[i][4]) });
+        attendedSet[phoneLast4(aRows[i][4])] = true;
+      }
+    }
+  }
+
+  // 今日繳費明細
+  const payments = [];
+  let todayTotal = 0;
+  for (let i = 1; i < ctx.recordRows.length; i++) {
+    const r = ctx.recordRows[i];
+    if (isTrue(r[8]) && monthDayKey(r[1]) === todayKey) {
+      const fee = Number(r[7]) || 0;
+      payments.push({ time: r[0], name: r[3], phoneLast4: phoneLast4(r[4]), item: r[10], fee: fee });
+      todayTotal += fee;
+    }
+  }
+
+  // 應到名單（學期全體＋單堂報今日）與未繳費名單
+  const sheet = getSheet(SHEET_NAMES.MEMBERS);
+  const rows = sheet.getDataRange().getValues();
+  const expected = [];
+  const unpaid = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (!rows[i][0] && !rows[i][1]) continue;
+    const member = rowToMember(rows[i], i + 1);
+    const enrolledKeys = parseEnrolledDates(member.enrolledCourses);
+    const relevant = member.memberType === 'semester' || enrolledKeys.indexOf(todayKey) !== -1;
+    if (!relevant) continue;
+    const feeInfo = calculateFee(member, course, ctx);
+    const l4 = phoneLast4(member.phone);
+    expected.push({
+      name: member.name,
+      phoneLast4: l4,
+      identity: member.identity,
+      memberType: member.memberType,
+      attended: !!attendedSet[l4],
+      fee: feeInfo.fee
+    });
+    if (feeInfo.fee > 0) {
+      unpaid.push({ name: member.name, phoneLast4: l4, fee: feeInfo.fee, identity: member.identity, memberType: member.memberType });
+    }
+  }
+
+  return jsonResponse({
+    status: 'ok',
+    course: course,
+    expectedCount: expected.length,
+    attendedCount: attended.length,
+    paidCount: payments.length,
+    todayTotal: todayTotal,
+    expected: expected,
+    attended: attended,
+    unpaid: unpaid,
+    payments: payments
+  });
+}
+
+// 17. 金流總覽：本學期累計收入（分品名）＋ 今日入帳明細
+function finance(data) {
+  const staff = validateStaff(data.staffPassword);
+  if (!staff) {
+    return jsonResponse({ status: 'error', message: '幹部密碼錯誤' }, 403);
+  }
+
+  const semester = data.semester || getSemesterName(new Date());
+  const todayKey = monthDayKey(new Date());
+  const rows = getSheet(SHEET_NAMES.RECORDS).getDataRange().getValues();
+
+  let semesterTotal = 0;
+  const byItem = {};
+  const todayPayments = [];
+  let todayTotal = 0;
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!isTrue(r[8])) continue;
+    const fee = Number(r[7]) || 0;
+    const d = parseDateValue(r[1]);
+    if (!d) continue;
+
+    if (getSemesterName(d) === semester) {
+      semesterTotal += fee;
+      const item = String(r[10] || '（無品名）');
+      // 品名含折抵說明時，併入基礎品名統計
+      const baseItem = item.replace(/（已折抵單堂 \$\d+）/, '');
+      if (!byItem[baseItem]) byItem[baseItem] = { item: baseItem, count: 0, total: 0 };
+      byItem[baseItem].count++;
+      byItem[baseItem].total += fee;
+    }
+
+    if (monthDayKey(d) === todayKey) {
+      todayPayments.push({ time: r[0], name: r[3], item: r[10], fee: fee, note: r[12] || '' });
+      todayTotal += fee;
+    }
+  }
+
+  const itemList = Object.keys(byItem).map(k => byItem[k]);
+  itemList.sort((a, b) => b.total - a.total);
+
+  return jsonResponse({
+    status: 'ok',
+    semester: semester,
+    semesterTotal: semesterTotal,
+    byItem: itemList,
+    today: {
+      date: formatDate(new Date()),
+      total: todayTotal,
+      payments: todayPayments
     }
   });
 }
@@ -912,19 +1473,19 @@ function syncMembers() {
     }, 500);
   }
 
-  // 一次讀 members，建立「末四碼 → {rowIndex, paidSemester}」索引（避免逐筆重讀）
+  // 一次讀 members，建立「正規化電話 → 現況」索引（避免逐筆重讀）
   const memberSheet = getSheet(SHEET_NAMES.MEMBERS);
   const mRows = memberSheet.getDataRange().getValues();
   const index = {};
   for (let i = 1; i < mRows.length; i++) {
-    const l4 = phoneLast4(mRows[i][1]);
-    if (l4 && !index[l4]) {
-      index[l4] = {
+    const key = normalizePhone(mRows[i][1]);
+    if (key && !index[key]) {
+      index[key] = {
         rowIndex: i + 1,
         paidSemester: mRows[i][5],
         enrolledCourses: mRows[i][6],
-        locked: isTrue(mRows[i][7]),                              // H 欄「手動鎖定」
-        cur: [mRows[i][0], mRows[i][1], mRows[i][2], mRows[i][3]] // 現值：姓名/電話/email/身分
+        locked: isTrue(mRows[i][7]),                                          // H 欄「手動鎖定」
+        cur: [mRows[i][0], mRows[i][1], mRows[i][2], mRows[i][3], mRows[i][4]] // 現值：姓名/電話/email/身分/類型
       };
     }
   }
@@ -944,29 +1505,31 @@ function syncMembers() {
 
       const plan = parsePlan(planText);
       const enrolled = parseEnrolledDates(enrollText).join(',');
-      const hit = index[phoneLast4(phone)];
+      const hit = index[normalizePhone(phone)];
 
       if (hit) {
-        // 更新：一次寫 7 欄。
+        // 更新：一次寫 8 欄。
         // F 欄（paidSemester）沿用原值；G 欄（報名堂次）用「聯集」合併，
         // 避免同一個人再次填表單加報新堂次時，覆蓋掉先前已報名的堂次。
         const merged = plan.memberType === 'semester'
           ? ''   // 轉為學期社員：堂次清空（學期已涵蓋全部）
           : mergeEnrolled(hit.enrolledCourses, enrolled);
 
-        // 幹部在 members 按了「手動鎖定」（H 欄）時，保留他在 姓名/電話/email/身分
-        // 的修正，不讓表單原始值蓋回去；「會員類型」與「報名堂次」仍以表單為準。
+        // 幹部在 members 按了「手動鎖定」（H 欄，walkin / updateMember 會自動設）時，
+        // 保留幹部修正過的 姓名/電話/email/身分/會員類型，不讓表單原始值蓋回去；
+        // 「報名堂次」仍以表單聯集為準。
         const finalName  = hit.locked ? hit.cur[0] : name;
-        const finalPhone = hit.locked ? asText(hit.cur[1]) : asText(phone);
+        const finalPhone = hit.locked ? phoneToStore(hit.cur[1]) : phoneToStore(phone);
         const finalEmail = hit.locked ? hit.cur[2] : email;
         const finalIdent = hit.locked ? hit.cur[3] : plan.identity;
+        const finalType  = hit.locked ? hit.cur[4] : plan.memberType;
 
-        memberSheet.getRange(hit.rowIndex, 1, 1, 7).setValues([[
-          finalName, finalPhone, finalEmail, finalIdent, plan.memberType, hit.paidSemester, merged
+        memberSheet.getRange(hit.rowIndex, 1, 1, 8).setValues([[
+          finalName, finalPhone, finalEmail, finalIdent, finalType, hit.paidSemester, merged, hit.locked
         ]]);
         updated++;
       } else {
-        appends.push([name, asText(phone), email, plan.identity, plan.memberType, false, enrolled]);
+        appends.push([name, phoneToStore(phone), email, plan.identity, plan.memberType, false, enrolled]);
       }
     } catch (e) {
       errors++;  // 逐筆防錯：單筆失敗不影響其他筆（不再全有全無）
@@ -1037,7 +1600,7 @@ function migrateAttendance() {
   // 先寫 attendance（同人同堂去重），完成後才重寫 records —— 順序確保不會遺失資料
   for (let i = 0; i < toMove.length; i++) {
     const r = toMove[i];
-    const l4 = String(r[4] == null ? '' : r[4]);
+    const l4 = phoneLast4(r[4]);
     if (!hasAttendance(l4, r[1])) {
       addAttendance({
         courseDate: r[1],
@@ -1065,6 +1628,28 @@ function migrateAttendance() {
     kept: keep.length - 1,
     sheet: SHEET_NAMES.ATTENDANCE
   });
+}
+
+// v2.0 一次性設定：電話欄設純文字（防開頭 0 被吃）、補齊 note 欄標題
+// 執行方式：Apps Script 編輯器 → 選 setupV2 → 執行一次
+function setupV2() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  // members：電話欄（B）設為純文字；補 H（locked）、I（note）標題
+  const members = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+  members.getRange('B:B').setNumberFormat('@');
+  if (members.getRange(1, 8).getValue() !== 'locked') members.getRange(1, 8).setValue('locked');
+  if (members.getRange(1, 9).getValue() !== 'note') members.getRange(1, 9).setValue('note');
+
+  // records：補 M 欄 note 標題
+  const records = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  if (records.getRange(1, 13).getValue() !== 'note') records.getRange(1, 13).setValue('note');
+
+  // attendance：補 H 欄 note 標題（不存在則建立）
+  const att = getOrCreateSheet(SHEET_NAMES.ATTENDANCE, ATTENDANCE_HEADERS);
+  if (att.getRange(1, 8).getValue() !== 'note') att.getRange(1, 8).setValue('note');
+
+  return jsonResponse({ status: 'ok', message: 'setupV2 完成：電話欄已設純文字，note 欄標題已補齊' });
 }
 
 // 保留給舊的可安裝觸發器(onFormSubmit)相容入口：改為執行同步
