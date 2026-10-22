@@ -106,6 +106,10 @@
   .sx-legend{display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--muted); margin:6px 0 12px;}
   .sx-legend span{display:inline-flex; align-items:center; gap:4px;}
   .sx-legend .sx-cell{width:20px; height:20px; font-size:11px;}
+  /* v2.5 前幹部 */
+  .badge.alumni{background:#fbeee6; color:#a3471b; font-weight:600;}
+  .badge.refund{background:#fde8e8; color:var(--err);}
+  .btn.small.alumni{background:#a3471b;}
   .toast{position:sticky; bottom:12px; background:var(--fg); color:#fff; padding:12px 16px; border-radius:12px; font-size:14px; text-align:center; display:none; z-index:10;}
   .toast.show{display:block;}
 </style>
@@ -163,6 +167,7 @@
         <select id="wIdentity">
           <option value="student">學生</option>
           <option value="public">社會人士</option>
+          <option value="alumni">前幹部（全部免費）</option>
         </select>
         <label for="wMemberType" style="margin-top:12px;">方案</label>
         <select id="wMemberType">
@@ -229,7 +234,7 @@ function syncFilterUI() {
   $('filterAll').classList.toggle('active', showAll);
 }
 
-function formatMoney(n) { return '$' + Number(n).toLocaleString('zh-TW'); }
+function formatMoney(n) { const v = Number(n) || 0; return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('zh-TW'); }
 function fmtTime(t) {
   const d = new Date(t);
   if (isNaN(d.getTime())) return '';
@@ -319,7 +324,14 @@ $('filterAll').addEventListener('click', () => { showAll = true; expandedRow = n
 $('searchBox').addEventListener('input', () => { expandedRow = null; renderMemberList(); });
 
 function typeLabel(m) {
-  return (m.memberType === 'semester' ? '學期' : '單堂') + '・' + (m.identity === 'student' ? '學生' : '社會');
+  return (m.memberType === 'semester' ? '學期' : '單堂') + '・' + idLabel(m.identity, true);
+}
+
+// v2.5：身份顯示（short=true 時「社會人士」縮成「社會」）
+function idLabel(identity, short) {
+  if (identity === 'alumni') return '前幹部';
+  if (identity === 'public') return short ? '社會' : '社會人士';
+  return '學生';
 }
 
 function renderMemberList() {
@@ -349,7 +361,8 @@ function renderMemberList() {
         <div class="name">${escapeHtml(m.name)}</div>
         <div class="badges">
           <span class="badge type">${typeLabel(m)}</span>
-          ${rosterData.course ? (m.fee > 0 ? `<span class="badge unpaid">待繳 ${formatMoney(m.fee)}</span>` : `<span class="badge paid">${m.attended ? '已繳／免繳' : '無需繳費'}</span>`) : ''}
+          ${m.identity === 'alumni' ? '<span class="badge alumni">前幹部免費</span>' : ''}
+          ${rosterData.course && m.identity !== 'alumni' ? (m.fee > 0 ? `<span class="badge unpaid">待繳 ${formatMoney(m.fee)}</span>` : `<span class="badge paid">${m.attended ? '已繳／免繳' : '無需繳費'}</span>`) : ''}
           ${rosterData.course && m.attended ? '<span class="badge attended">已簽到</span>' : ''}
           ${m.note ? '<span class="badge note">有備注</span>' : ''}
         </div>
@@ -390,7 +403,7 @@ function renderActions(rowIndex) {
       }
     }
     // v2.4：今天是系列課 → 單堂社員可一次繳多堂（每堂一張收據）
-    if (rosterData.course.series && m.memberType === 'single') {
+    if (rosterData.course.series && m.memberType === 'single' && m.identity !== 'alumni') {
       html += `<button class="btn small green" data-act="series">系列多堂一次繳</button>`;
     }
     if (!m.attended) {
@@ -400,6 +413,10 @@ function renderActions(rowIndex) {
     }
   }
   html += `<button class="btn small secondary" data-act="change">變更身份／方案</button>`;
+  // v2.5：登記前幹部（任何日子都可登記；已是前幹部則不顯示）
+  if (m.identity !== 'alumni') {
+    html += `<button class="btn small alumni" data-act="alumni">登記前幹部</button>`;
+  }
   html += `<button class="btn small secondary" data-act="note">備注</button>`;
   html += '</div>';
   if (!rosterData.course) {
@@ -436,6 +453,10 @@ async function handleAction(act, m, box) {
     await doSeries(m, slot);
   }
 
+  if (act === 'alumni') {
+    await doAlumni(m, slot);
+  }
+
   if (act === 'attend') {
     // 未繳費就補簽到：只記出席、不記收款，先讓幹部確認
     if (m.fee > 0 && !confirm(`${m.name} 還有 ${formatMoney(m.fee)} 未繳。\n補簽到只記出席、不會記收款，確定要補簽到嗎？`)) return;
@@ -444,6 +465,12 @@ async function handleAction(act, m, box) {
       const r = await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex });
       toast(r.message);
       await refreshRoster();
+      // v2.5：前幹部補簽到會開 $0 收據 → 顯示密碼，必要時口頭告知
+      if (r.receiptCode) {
+        const nb = $('actions-' + m.rowIndex);
+        if (nb) nb.querySelector('.panel-slot').innerHTML =
+          `<div class="code-box"><div class="code">${escapeHtml(r.receiptCode)}</div><div class="hint">前幹部 $0 收據密碼。社員可在簽到頁「歷史收據」直接點開，或用此密碼到領收據頁領取。</div></div>`;
+      }
     } catch (err) {
       slot.innerHTML = `<div class="detail" style="color:var(--err);">${escapeHtml(err.message)}</div>`;
     }
@@ -469,7 +496,9 @@ async function handleAction(act, m, box) {
         <select id="chgIdentity">
           <option value="student" ${m.identity === 'student' ? 'selected' : ''}>學生</option>
           <option value="public" ${m.identity === 'public' ? 'selected' : ''}>社會人士</option>
+          ${m.identity === 'alumni' ? '<option value="alumni" selected>前幹部（全部免費）</option>' : ''}
         </select>
+        ${m.identity === 'alumni' ? '<div class="detail" style="font-size:12px;">改回學生／社會人士即取消前幹部身份（之後恢復收費；已退的款項不會自動補收）。</div>' : '<div class="detail" style="font-size:12px;">要改成前幹部請用「登記前幹部」按鈕（可同時處理退費）。</div>'}
         <label>方案</label>
         <select id="chgType">
           <option value="single" ${m.memberType === 'single' ? 'selected' : ''}>單堂社員</option>
@@ -560,6 +589,69 @@ async function doConfirm(m, slot, afterDone) {
   }
 }
 
+// ===== v2.5 登記前幹部（含本學期已繳款項退費）=====
+async function doAlumni(m, slot) {
+  slot.innerHTML = '<div class="loading"><div class="spinner"></div>查詢本學期繳費紀錄...</div>';
+  let q;
+  try {
+    q = await callAPI('alumniQuote', { staffPassword, rowIndex: m.rowIndex });
+  } catch (err) {
+    slot.innerHTML = `<div class="detail" style="color:var(--err); margin-top:8px;">${escapeHtml(err.message)}</div>`;
+    return;
+  }
+  let html = `<div class="inline-panel">
+    <div style="font-weight:600; margin-bottom:4px;">登記 ${escapeHtml(m.name)} 為前幹部</div>
+    <div class="detail" style="font-size:13px; margin-bottom:8px;">登記後所有社課（單堂、學期、系列）全部免費，每次出席自動開一張 $0 收據。</div>`;
+  if (q.refundable.length) {
+    html += `<div class="detail" style="font-size:13px; margin-bottom:4px;">${escapeHtml(q.semester)} 學期已繳款項，勾選要退費的（會記一筆負數退費，金流報表自動扣除）：</div>`;
+    q.refundable.forEach(x => {
+      html += `<label class="sess-row" style="text-transform:none; letter-spacing:0; margin:0;">
+        <input type="checkbox" class="rf-chk" value="${escapeHtml(x.code)}" data-fee="${Number(x.fee)}" checked>
+        <div class="s-main">${escapeHtml(x.item)}<div class="s-sub">${escapeHtml(x.courseDate)}${x.future ? ' ・ 預繳未上' : ''} ・ 收據 ${escapeHtml(x.code)}</div></div>
+        <div class="s-sub">${formatMoney(x.fee)}</div>
+      </label>`;
+    });
+  } else {
+    html += '<div class="detail" style="font-size:13px;">本學期沒有已繳款項，不需退費。</div>';
+  }
+  html += `<button class="btn rf-go" style="background:#a3471b;"></button>
+    <div class="detail rf-msg" style="margin-top:8px;"></div>
+  </div>`;
+  slot.innerHTML = html;
+
+  const go = slot.querySelector('.rf-go');
+  const picked = () => Array.from(slot.querySelectorAll('.rf-chk:checked'));
+  const sync = () => {
+    const total = picked().reduce((a, c) => a + Number(c.dataset.fee || 0), 0);
+    go.textContent = total ? `確認登記前幹部，並退費 ${formatMoney(total)}` : '確認登記前幹部（不退費）';
+  };
+  slot.querySelectorAll('.rf-chk').forEach(c => c.addEventListener('change', sync));
+  sync();
+
+  go.addEventListener('click', async () => {
+    const codes = picked().map(c => c.value);
+    const total = picked().reduce((a, c) => a + Number(c.dataset.fee || 0), 0);
+    if (!confirm(`確定登記 ${m.name} 為前幹部？` + (total ? `\n會記一筆退費 ${formatMoney(total)}，請現場退還現金。` : ''))) return;
+    go.disabled = true;
+    try {
+      const r = await callAPI('setAlumni', { staffPassword, rowIndex: m.rowIndex, refundCodes: codes });
+      toast('已登記前幹部');
+      await refreshRoster();
+      expandedRow = m.rowIndex;
+      renderMemberList();
+      const nb = $('actions-' + m.rowIndex);
+      if (nb) nb.querySelector('.panel-slot').innerHTML =
+        `<div class="status ok" style="margin-top:10px;"><span>✓</span>${escapeHtml(r.message)}</div>` +
+        (r.receiptCode ? `<div class="detail" style="margin-top:6px;">今天這堂已補開 $0 收據，密碼 <b>${escapeHtml(r.receiptCode)}</b>（社員簽到頁歷史收據可直接點開）。</div>` : '') +
+        (r.refundTotal ? `<div class="code-box" style="border-color:var(--err); background:#fdf2f2;"><div class="code" style="color:var(--err); letter-spacing:0;">退 ${formatMoney(r.refundTotal)}</div><div class="hint">已記 ${r.refundCount} 筆退費，原收據作廢。請現場退還現金。</div></div>` : '');
+    } catch (err) {
+      slot.querySelector('.rf-msg').textContent = err.message;
+      slot.querySelector('.rf-msg').style.color = 'var(--err)';
+      go.disabled = false;
+    }
+  });
+}
+
 // ===== v2.4 系列多堂一次繳（名單列與現場報名共用）=====
 async function doSeries(m, slot, afterDone) {
   slot.innerHTML = '<div class="loading"><div class="spinner"></div>讀取系列堂次...</div>';
@@ -578,7 +670,7 @@ async function doSeries(m, slot, afterDone) {
 
   let html = `<div class="inline-panel">
     <div style="font-weight:600; margin-bottom:4px;">${escapeHtml(info.series)}（共 ${info.count} 堂）</div>
-    <div class="detail" style="font-size:13px; margin-bottom:6px;">每堂 ${formatMoney(info.perFee)}（${q.member.identity === 'student' ? '學生' : '社會人士'}單堂價），勾選要一起繳的堂次：</div>`;
+    <div class="detail" style="font-size:13px; margin-bottom:6px;">每堂 ${formatMoney(info.perFee)}（${idLabel(q.member.identity)}單堂價），勾選要一起繳的堂次：</div>`;
   info.sessions.forEach(s => {
     const status = s.paid ? '已繳' : (s.past ? '已結束' : (s.isToday ? '今天' : ''));
     html += `<label class="sess-row ${s.payable ? '' : 'disabled'}" style="text-transform:none; letter-spacing:0; margin:0;">
@@ -677,7 +769,7 @@ $('btnWalkin').addEventListener('click', async () => {
     let html = `
       <div class="card">
         <div class="status ok"><span>✓</span>已建立／更新報名</div>
-        <div class="detail"><b>${escapeHtml(m.name)}</b>（${m.identity === 'student' ? '學生' : '社會人士'}・${m.memberType === 'semester' ? '學期' : '單堂'}）${r.receiptItem ? '<br>品名：' + escapeHtml(r.receiptItem) : ''}</div>
+        <div class="detail"><b>${escapeHtml(m.name)}</b>（${idLabel(m.identity)}・${m.memberType === 'semester' ? '學期' : '單堂'}）${r.receiptItem ? '<br>品名：' + escapeHtml(r.receiptItem) : ''}</div>
         ${feeBlock}
         <div class="panel-slot"></div>
       </div>`;
@@ -707,8 +799,8 @@ $('btnWalkin').addEventListener('click', async () => {
       slot.innerHTML = `<button class="btn" id="btnWalkinFree">無需繳費，完成簽到</button>`;
       $('btnWalkinFree').addEventListener('click', async () => {
         try {
-          await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex });
-          toast(`${m.name} 簽到完成`);
+          const ar = await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex });
+          toast(ar.message || `${m.name} 簽到完成`);
           $('wName').value = ''; $('wPhone').value = '';
           $('walkinResult').innerHTML = '';
           await refreshRoster();
@@ -751,7 +843,7 @@ async function loadReport() {
     if (stats.unpaid.length > 0) {
       html += `<h3 class="sec">尚未繳費（${stats.unpaid.length} 人）</h3><div class="card mini-list">`;
       stats.unpaid.forEach(u => {
-        html += `<div class="mini-item"><span>${escapeHtml(u.name)}（${u.memberType === 'semester' ? '學期' : '單堂'}・${u.identity === 'student' ? '學生' : '社會'}）</span><span class="r">${formatMoney(u.fee)}</span></div>`;
+        html += `<div class="mini-item"><span>${escapeHtml(u.name)}（${u.memberType === 'semester' ? '學期' : '單堂'}・${idLabel(u.identity, true)}）</span><span class="r">${formatMoney(u.fee)}</span></div>`;
       });
       html += '</div>';
     }
@@ -759,7 +851,7 @@ async function loadReport() {
     if (collected.payments.length > 0) {
       html += `<h3 class="sec">今日收款明細</h3><div class="card mini-list">`;
       collected.payments.forEach(p => {
-        html += `<div class="mini-item"><span>${fmtTime(p.time)} ${escapeHtml(p.name)}${p.prepaid ? ' <span class="badge series">預繳 ' + escapeHtml(p.courseDate) + '</span>' : ''}${p.note ? '（注：' + escapeHtml(p.note) + '）' : ''}<br><span style="font-size:12px;color:var(--muted);">${escapeHtml(p.item)}</span></span><span class="r">${formatMoney(p.fee)}</span></div>`;
+        html += `<div class="mini-item"><span>${fmtTime(p.time)} ${escapeHtml(p.name)}${p.prepaid ? ' <span class="badge series">預繳 ' + escapeHtml(p.courseDate) + '</span>' : ''}${p.refund ? ' <span class="badge refund">退費</span>' : ''}${p.note ? '（注：' + escapeHtml(p.note) + '）' : ''}<br><span style="font-size:12px;color:var(--muted);">${escapeHtml(p.item)}</span></span><span class="r">${formatMoney(p.fee)}</span></div>`;
       });
       html += '</div>';
     }
@@ -833,7 +925,7 @@ async function loadSeries() {
       } else {
         html += `<table class="sx-table"><thead><tr><th>姓名</th>${s.sessions.map(x => `<th>${x.index}<br><span style="font-size:11px;">${escapeHtml(x.key)}</span></th>`).join('')}</tr></thead><tbody>`;
         s.members.forEach(m => {
-          html += `<tr><td>${escapeHtml(m.name)}${m.bundle ? ' <span class="badge series">套</span>' : ''}<div style="font-size:11px;color:var(--muted);">${escapeHtml(m.phoneLast4)} ・ ${m.paidCount}/${s.sessions.length} 堂已繳</div></td>`;
+          html += `<tr><td>${escapeHtml(m.name)}${m.identity === 'alumni' ? ' <span class="badge alumni">前幹部</span>' : ''}${m.bundle ? ' <span class="badge series">套</span>' : ''}<div style="font-size:11px;color:var(--muted);">${escapeHtml(m.phoneLast4)} ・ ${m.paidCount}/${s.sessions.length} 堂已繳</div></td>`;
           m.cells.forEach(c => {
             const cls = c.paid ? 'paid' : (c.enrolled ? 'enrolled' : 'none');
             const txt = c.paid ? '✓' : (c.enrolled ? '報' : '·');

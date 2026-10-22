@@ -236,9 +236,13 @@ function renderResult(data, phone) {
       <div class="status ok"><span>✓</span>簽到成功</div>
       <div class="detail">
         <b>${escapeHtml(memberName)}</b>您已完成今日 <b>${escapeHtml(courseName)}</b> 簽到。<br>
-        本堂無需繳費。
+        ${data.alumni ? '前幹部身份，本堂免費。' : '本堂無需繳費。'}
       </div>
     `;
+    // v2.5：前幹部 → 本堂 $0 收據
+    if (data.alumni && data.receiptCode) {
+      html += `<a class="btn" href="receipt.html?code=${encodeURIComponent(data.receiptCode)}" style="display:block; text-align:center; text-decoration:none;">領取本堂 $0 收據 →</a>`;
+    }
 
     if (data.history && data.history.length > 0) {
       html += '<div class="history"><h3>歷史收據（點擊可補領）</h3>';
