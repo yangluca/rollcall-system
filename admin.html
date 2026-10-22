@@ -110,7 +110,43 @@
   .badge.alumni{background:#fbeee6; color:#a3471b; font-weight:600;}
   .badge.refund{background:#fde8e8; color:var(--err);}
   .btn.small.alumni{background:#a3471b;}
-  .toast{position:sticky; bottom:12px; background:var(--fg); color:#fff; padding:12px 16px; border-radius:12px; font-size:14px; text-align:center; display:none; z-index:10;}
+  /* v2.6 背景工作列 */
+  body.has-tray .wrap{padding-bottom:110px;}
+  .tray{position:fixed; left:50%; transform:translateX(-50%); bottom:10px; width:calc(100% - 20px); max-width:460px; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 8px 32px rgba(0,0,0,.16); z-index:20; overflow:hidden;}
+  .tray-head{display:flex; align-items:center; gap:10px; padding:11px 14px; cursor:pointer; font-size:14px; font-weight:600; background:#fafafa;}
+  .tray-title{display:flex; align-items:center; gap:8px;}
+  .tray-counts{display:flex; gap:8px; font-size:13px;}
+  .tray-counts .c-ok{color:var(--ok);} .tray-counts .c-err{color:var(--err);}
+  .tray-arrow{margin-left:auto; font-size:12px; color:var(--muted); font-weight:400;}
+  .tray-peek{display:flex; align-items:center; gap:8px; padding:8px 14px 11px; font-size:13px; border-top:1px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .tray-body{max-height:50vh; overflow-y:auto; border-top:1px solid var(--line);}
+  .task{padding:10px 14px; border-top:1px solid var(--line); font-size:13px; line-height:1.5;}
+  .task:first-child{border-top:none;}
+  .task.st-err{background:#fdf2f2;} .task.st-warn{background:#fdf8ec;}
+  .t-head{display:flex; align-items:center; gap:8px;}
+  .t-main{flex:1;}
+  .t-time{font-size:11px; color:var(--muted);}
+  .t-detail{margin:4px 0 0 24px; color:var(--muted);}
+  .task.st-err .t-detail{color:var(--err);}
+  .t-code{color:var(--blue); letter-spacing:.08em; font-size:15px;}
+  .t-codes{display:flex; flex-wrap:wrap; gap:4px 12px; margin:2px 0;}
+  .t-refund{color:var(--err); font-weight:600; font-size:16px; margin:2px 0;}
+  .t-actions{display:flex; gap:8px; margin:6px 0 0 24px; flex-wrap:wrap; align-items:center;}
+  .t-actions:empty{display:none;}
+  .t-btn{padding:5px 11px; font-size:12px; border-radius:8px; border:1.5px solid var(--fg); background:var(--fg); color:#fff; cursor:pointer; font-family:inherit;}
+  .t-btn.ghost{background:#fff; color:var(--muted); border-color:var(--line);}
+  .t-saved{font-size:12px; color:var(--ok);}
+  .t-note{display:flex; gap:6px; margin:6px 0 0 24px;}
+  .t-note input{padding:7px 10px; font-size:14px; border-radius:8px;}
+  .tray-foot{padding:8px 14px; border-top:1px solid var(--line); text-align:right;}
+  .t-ic{display:inline-flex; width:16px; justify-content:center; font-weight:700;}
+  .t-ic.ok{color:var(--ok);} .t-ic.err{color:var(--err);} .t-ic.warn{color:var(--warn);}
+  .mini-spin{display:inline-block; width:13px; height:13px; border:2px solid var(--line); border-top-color:var(--fg); border-radius:50%; animation:spin .8s linear infinite; flex:none;}
+  .badge.busy{background:#eef2f8; color:var(--blue); display:inline-flex; align-items:center; gap:5px;}
+  .badge.busy .mini-spin{width:10px; height:10px; border-top-color:var(--blue);}
+  .busy-note{font-size:12px; color:var(--blue); margin-top:8px;}
+  .toast{position:fixed; left:50%; transform:translateX(-50%); bottom:14px; max-width:440px; width:calc(100% - 40px); box-sizing:border-box; background:var(--fg); color:#fff; padding:12px 16px; border-radius:12px; font-size:14px; text-align:center; display:none; z-index:30;}
+  body.has-tray .toast{bottom:100px;}
   .toast.show{display:block;}
 </style>
 </head>
@@ -195,6 +231,8 @@
   </div>
 
   <div class="toast" id="toast"></div>
+  <!-- v2.6 背景工作列 -->
+  <div class="tray" id="tray" style="display:none;"></div>
   <footer>師大影像藝術創作社 · 點名繳費收據系統</footer>
 </div>
 
@@ -365,6 +403,7 @@ function renderMemberList() {
           ${rosterData.course && m.identity !== 'alumni' ? (m.fee > 0 ? `<span class="badge unpaid">待繳 ${formatMoney(m.fee)}</span>` : `<span class="badge paid">${m.attended ? '已繳／免繳' : '無需繳費'}</span>`) : ''}
           ${rosterData.course && m.attended ? '<span class="badge attended">已簽到</span>' : ''}
           ${m.note ? '<span class="badge note">有備注</span>' : ''}
+          ${busyRows[m.rowIndex] ? '<span class="badge busy"><span class="mini-spin"></span>處理中</span>' : ''}
         </div>
       </div>
       <div class="meta">末四碼 ${m.phoneLast4}${rosterData.course && !m.relevant ? ' ・ 今天沒報名（收款時會自動加收）' : ''}${m.credit > 0 ? ` ・ 可折抵 ${formatMoney(m.credit)}` : ''}${m.note ? ' ・ 備注：' + escapeHtml(m.note) : ''}</div>
@@ -425,6 +464,11 @@ function renderActions(rowIndex) {
   html += '<div class="panel-slot"></div>';
   box.innerHTML = html;
 
+  // v2.6：這位社員有工作還在跑 → 鎖住會動到金流／簽到／身份的按鈕（防重複收款），備注照常可用
+  if (busyRows[m.rowIndex]) {
+    box.querySelectorAll('button[data-act]').forEach(btn => { if (btn.dataset.act !== 'note') btn.disabled = true; });
+    box.querySelector('.action-btns').insertAdjacentHTML('afterend', '<div class="busy-note">這位社員有一筆工作處理中，完成後按鈕會自動解鎖（進度看下方工作列）。</div>');
+  }
   box.querySelectorAll('button[data-act]').forEach(btn => {
     btn.addEventListener('click', () => handleAction(btn.dataset.act, m, box));
   });
@@ -433,20 +477,10 @@ function renderActions(rowIndex) {
 async function handleAction(act, m, box) {
   const slot = box.querySelector('.panel-slot');
 
-  if (act === 'pay') {
-    await doConfirm(m, slot);
-  }
-
-  if (act === 'payAdd') {
-    // 加收今天＋收款：先把今天加入報名堂次，成功後直接進收款流程
-    slot.innerHTML = '<div class="loading"><div class="spinner"></div>加收今天堂次...</div>';
-    try {
-      await callAPI('updateMember', { staffPassword, rowIndex: m.rowIndex, addToday: true });
-    } catch (err) {
-      slot.innerHTML = `<div class="detail" style="color:var(--err);">${escapeHtml(err.message)}</div>`;
-      return;
-    }
-    await doConfirm(m, slot);
+  // v2.6：會動到金流／簽到的動作一律丟到背景工作列，按完卡片就收起，可以馬上處理下一位
+  if (act === 'pay' || act === 'payAdd') {
+    startPayTask(m, act === 'payAdd');
+    collapseCard();
   }
 
   if (act === 'series') {
@@ -460,76 +494,60 @@ async function handleAction(act, m, box) {
   if (act === 'attend') {
     // 未繳費就補簽到：只記出席、不記收款，先讓幹部確認
     if (m.fee > 0 && !confirm(`${m.name} 還有 ${formatMoney(m.fee)} 未繳。\n補簽到只記出席、不會記收款，確定要補簽到嗎？`)) return;
-    slot.innerHTML = '<div class="loading"><div class="spinner"></div>簽到中...</div>';
-    try {
-      const r = await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex });
-      toast(r.message);
-      await refreshRoster();
-      // v2.5：前幹部補簽到會開 $0 收據 → 顯示密碼，必要時口頭告知
-      if (r.receiptCode) {
-        const nb = $('actions-' + m.rowIndex);
-        if (nb) nb.querySelector('.panel-slot').innerHTML =
-          `<div class="code-box"><div class="code">${escapeHtml(r.receiptCode)}</div><div class="hint">前幹部 $0 收據密碼。社員可在簽到頁「歷史收據」直接點開，或用此密碼到領收據頁領取。</div></div>`;
+    runTask({
+      rowIndex: m.rowIndex, name: m.name, label: '補簽到',
+      run: () => callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex }),
+      onOk: (r) => {
+        patchMember(m.rowIndex, { attended: true });
+        return escapeHtml(r.message) + (r.receiptCode ? `<br>前幹部 $0 收據密碼 <b class="t-code">${escapeHtml(r.receiptCode)}</b>` : '');
       }
-    } catch (err) {
-      slot.innerHTML = `<div class="detail" style="color:var(--err);">${escapeHtml(err.message)}</div>`;
-    }
+    });
+    collapseCard();
   }
 
   if (act === 'unattend') {
     // 取消簽到：只刪出席紀錄，已收的款項與收據不受影響
     if (!confirm(`確定要取消 ${m.name} 今日的簽到嗎？\n（繳費紀錄與收據不會被刪除）`)) return;
-    slot.innerHTML = '<div class="loading"><div class="spinner"></div>取消簽到中...</div>';
-    try {
-      const r = await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex, remove: true });
-      toast(r.message);
-      await refreshRoster();
-    } catch (err) {
-      slot.innerHTML = `<div class="detail" style="color:var(--err);">${escapeHtml(err.message)}</div>`;
-    }
+    runTask({
+      rowIndex: m.rowIndex, name: m.name, label: '取消簽到',
+      run: () => callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex, remove: true }),
+      onOk: (r) => { patchMember(m.rowIndex, { attended: false }); return escapeHtml(r.message); }
+    });
+    collapseCard();
   }
 
   if (act === 'change') {
     slot.innerHTML = `
       <div class="inline-panel">
         <label>身份</label>
-        <select id="chgIdentity">
+        <select class="chg-identity">
           <option value="student" ${m.identity === 'student' ? 'selected' : ''}>學生</option>
           <option value="public" ${m.identity === 'public' ? 'selected' : ''}>社會人士</option>
           ${m.identity === 'alumni' ? '<option value="alumni" selected>前幹部（全部免費）</option>' : ''}
         </select>
         ${m.identity === 'alumni' ? '<div class="detail" style="font-size:12px;">改回學生／社會人士即取消前幹部身份（之後恢復收費；已退的款項不會自動補收）。</div>' : '<div class="detail" style="font-size:12px;">要改成前幹部請用「登記前幹部」按鈕（可同時處理退費）。</div>'}
         <label>方案</label>
-        <select id="chgType">
+        <select class="chg-type">
           <option value="single" ${m.memberType === 'single' ? 'selected' : ''}>單堂社員</option>
           <option value="semester" ${m.memberType === 'semester' ? 'selected' : ''}>學期社員</option>
         </select>
-        <button class="btn" id="btnApplyChange">套用變更</button>
-        <div class="detail" id="chgMsg" style="margin-top:8px;"></div>
+        <button class="btn chg-go">套用變更</button>
       </div>`;
-    $('btnApplyChange').addEventListener('click', async () => {
-      $('btnApplyChange').disabled = true;
-      try {
-        const r = await callAPI('updateMember', {
-          staffPassword, rowIndex: m.rowIndex,
-          identity: $('chgIdentity').value, memberType: $('chgType').value
-        });
-        let msg = `已更新：${typeLabel(r.member)}，`;
-        msg += (r.fee == null) ? '費用於社課當日計算' : `今日應繳 ${formatMoney(r.fee)}`;
-        if (r.credit > 0) msg += `（已折抵 ${formatMoney(r.credit)}）`;
-        if (r.refundHint) msg += '。' + r.refundHint;
-        toast('變更完成');
-        await refreshRoster();
-        expandedRow = r.member.rowIndex;
-        renderMemberList();
-        const newBox = $('actions-' + r.member.rowIndex);
-        if (newBox) newBox.querySelector('.panel-slot').innerHTML =
-          `<div class="detail" style="color:var(--ok); margin-top:8px;">${msg}</div>`;
-      } catch (err) {
-        $('chgMsg').textContent = err.message;
-        $('chgMsg').style.color = 'var(--err)';
-        $('btnApplyChange').disabled = false;
-      }
+    slot.querySelector('.chg-go').addEventListener('click', () => {
+      const identity = slot.querySelector('.chg-identity').value;
+      const memberType = slot.querySelector('.chg-type').value;
+      runTask({
+        rowIndex: m.rowIndex, name: m.name, label: '變更身份／方案',
+        run: () => callAPI('updateMember', { staffPassword, rowIndex: m.rowIndex, identity, memberType }),
+        onOk: (r) => {
+          let msg = `已更新：${typeLabel(r.member)}，`;
+          msg += (r.fee == null) ? '費用於社課當日計算' : `今日應繳 ${formatMoney(r.fee)}`;
+          if (r.credit > 0) msg += `（已折抵 ${formatMoney(r.credit)}）`;
+          if (r.refundHint) msg += '。' + r.refundHint;
+          return escapeHtml(msg);
+        }
+      });
+      collapseCard();
     });
   }
 
@@ -537,57 +555,215 @@ async function handleAction(act, m, box) {
     slot.innerHTML = `
       <div class="inline-panel">
         <label>備注（會寫入 Google Sheets，跟著這位社員）</label>
-        <textarea id="noteText" rows="2" placeholder="例：已私下轉帳、下次補收據…"></textarea>
-        <button class="btn" id="btnSaveNote">儲存備注</button>
-        <div class="detail" id="noteMsg" style="margin-top:8px;"></div>
+        <textarea class="note-text" rows="2" placeholder="例：已私下轉帳、下次補收據…"></textarea>
+        <button class="btn note-go">儲存備注</button>
       </div>`;
-    $('btnSaveNote').addEventListener('click', async () => {
-      const note = $('noteText').value.trim();
+    slot.querySelector('.note-go').addEventListener('click', () => {
+      const note = slot.querySelector('.note-text').value.trim();
       if (!note) return;
-      $('btnSaveNote').disabled = true;
-      try {
-        await callAPI('addNote', { staffPassword, scope: 'member', rowIndex: m.rowIndex, note });
-        toast('備注已儲存');
-        await refreshRoster();
-      } catch (err) {
-        $('noteMsg').textContent = err.message;
-        $('noteMsg').style.color = 'var(--err)';
-        $('btnSaveNote').disabled = false;
-      }
+      runTask({
+        rowIndex: m.rowIndex, name: m.name, label: '備注', money: false,
+        run: () => callAPI('addNote', { staffPassword, scope: 'member', rowIndex: m.rowIndex, note }),
+        onOk: () => '備注已儲存：' + escapeHtml(note)
+      });
+      collapseCard();
     });
   }
 }
 
-// 收款（名單列與現場報名共用）
-async function doConfirm(m, slot, afterDone) {
-  slot.innerHTML = '<div class="loading"><div class="spinner"></div>確認收款中...</div>';
+// 收款（名單列「收款」「加收今天＋收款」與現場報名共用）
+function startPayTask(m, addToday) {
+  runTask({
+    rowIndex: m.rowIndex, name: m.name,
+    label: (addToday ? '加收今天＋收款 ' : '收款 ') + formatMoney(m.fee),
+    dupHint: /已收過|不可重複/,
+    run: async () => {
+      if (addToday) await callAPI('updateMember', { staffPassword, rowIndex: m.rowIndex, addToday: true });
+      return callAPI('confirm', { staffPassword, rowIndex: m.rowIndex });
+    },
+    onOk: (r, t) => {
+      patchMember(m.rowIndex, { fee: 0, attended: true, relevant: true });
+      t.noteCode = r.code; // 可在工作列補這筆收款的備注
+      return `已收 ${formatMoney(r.fee)}・${escapeHtml(r.receiptItem)}<br>收據密碼 <b class="t-code">${escapeHtml(r.code)}</b>（社員頁面會自動跳出，網路不順時才需口頭告知）`;
+    }
+  });
+}
+
+// ===== v2.6 背景工作列：按下收款／簽到後不必等轉圈，可以馬上處理下一位 =====
+// 每個動作是一筆獨立工作，顯示在畫面底部的工作列（處理中 / 完成 / 失敗＋重試），
+// 不再綁在社員卡片上 → 點別人、收起卡片、切分頁都不會讓結果消失。
+const tasks = [];              // 最新在前
+const busyRows = {};           // rowIndex → 進行中的工作數（同一人處理中時鎖住金流按鈕，防重複收款）
+let taskSeq = 0;
+let trayOpen = false;
+let refreshTimer = null;
+
+function runningCount() { return tasks.filter(t => t.status === 'run').length; }
+
+function runTask(opt) {
+  const t = {
+    id: ++taskSeq, rowIndex: opt.rowIndex, name: opt.name, label: opt.label,
+    status: 'run', detail: '', time: new Date(), opt: opt
+  };
+  tasks.unshift(t);
+  // 只保留最近 30 筆（進行中的一定保留）
+  for (let i = tasks.length - 1; i >= 0 && tasks.length > 30; i--) {
+    if (tasks[i].status !== 'run') tasks.splice(i, 1);
+  }
+  execTask(t);
+  toast(`已送出：${opt.name} ${opt.label}`);
+  return t;
+}
+
+async function execTask(t) {
+  const opt = t.opt;
+  t.status = 'run'; t.detail = ''; t.alert = false;
+  busyRows[t.rowIndex] = (busyRows[t.rowIndex] || 0) + 1;
+  renderTray(); rerenderKeepPanel();
   try {
-    const r = await callAPI('confirm', { staffPassword, rowIndex: m.rowIndex });
-    slot.innerHTML = `
-      <div class="status ok" style="margin-top:10px;"><span>✓</span>收款完成</div>
-      <div class="detail" style="text-align:center;">
-        <b>${escapeHtml(r.memberName)}</b> 已繳交 ${formatMoney(r.fee)}<br>${escapeHtml(r.receiptItem)}
-      </div>
-      <div class="code-box">
-        <div class="code">${escapeHtml(r.code)}</div>
-        <div class="hint">社員的簽到頁面會自動跳出收據，不用報這組碼。<br>（網路不順時才需要口頭告知備用）</div>
-      </div>
-      <label>這筆收款的備注（選填）</label>
-      <textarea id="payNote" rows="2" placeholder="例：找零 $50、朋友代付…"></textarea>
-      <button class="btn secondary" id="btnPayNote">存備注並完成</button>
-    `;
-    $('btnPayNote').addEventListener('click', async () => {
-      const note = $('payNote').value.trim();
-      if (note) {
-        try { await callAPI('addNote', { staffPassword, scope: 'record', code: r.code, note }); } catch(e) {}
-      }
-      toast('已完成');
-      if (afterDone) afterDone(); else { await refreshRoster(); }
-    });
+    const r = await opt.run();
+    t.status = 'ok';
+    t.detail = opt.onOk ? (opt.onOk(r, t) || '') : '';
   } catch (err) {
-    slot.innerHTML = `<div class="detail" style="color:var(--err); margin-top:8px;">${escapeHtml(err.message)}</div>`;
+    const msg = String(err && err.message || err);
+    if (opt.dupHint && opt.dupHint.test(msg)) {
+      // 網路重送造成的「已收過」：錢其實已經記上了，不算失敗
+      t.status = 'warn';
+      t.detail = escapeHtml(msg) + '<br>多半是網路重送造成，系統裡已有這筆收款；請看名單狀態確認，不要再收一次。';
+    } else {
+      t.status = 'err';
+      t.detail = escapeHtml(msg);
+    }
+    t.alert = true;
+  } finally {
+    busyRows[t.rowIndex] = Math.max(0, (busyRows[t.rowIndex] || 1) - 1);
+    if (t.alert) trayOpen = true;   // 失敗或需要退現金 → 自動展開提醒
+    renderTray(); rerenderKeepPanel();
+    scheduleRefresh();
   }
 }
+
+// 全部工作結束後再整批刷新名單一次（避免每筆都重抓、也避免刷新時打斷操作）
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(async () => {
+    if (runningCount() > 0) return; // 還有工作在跑，等最後一筆結束再刷
+    try { await refreshRoster(); } catch (e) {}
+  }, 700);
+}
+
+// 成功後先在本地更新那一列（不用等名單重抓就看得到「已簽到」）
+function patchMember(rowIndex, fields) {
+  if (!rosterData) return;
+  const m = rosterData.members.find(x => x.rowIndex === rowIndex);
+  if (m) Object.assign(m, fields);
+}
+
+function collapseCard() {
+  expandedRow = null;
+  renderMemberList();
+}
+
+// 重畫名單但保留目前展開卡片裡的面板（正在打字的備注、勾選中的堂次都不會被清掉）
+function rerenderKeepPanel() {
+  if (!rosterData) return;
+  const keep = expandedRow;
+  const oldBox = keep ? $('actions-' + keep) : null;
+  const oldSlot = oldBox ? oldBox.querySelector('.panel-slot') : null;
+  renderMemberList();
+  if (oldSlot) {
+    const newBox = $('actions-' + keep);
+    const newSlot = newBox && newBox.querySelector('.panel-slot');
+    if (newSlot) newSlot.replaceWith(oldSlot);
+  }
+}
+
+function taskIcon(st) {
+  if (st === 'run') return '<span class="mini-spin"></span>';
+  if (st === 'ok') return '<span class="t-ic ok">✓</span>';
+  if (st === 'warn') return '<span class="t-ic warn">!</span>';
+  return '<span class="t-ic err">✕</span>';
+}
+
+function renderTray() {
+  const tray = $('tray');
+  if (!tasks.length) { tray.style.display = 'none'; document.body.classList.remove('has-tray'); return; }
+  tray.style.display = 'block';
+  document.body.classList.add('has-tray');
+  const run = runningCount();
+  const ok = tasks.filter(t => t.status === 'ok').length;
+  const bad = tasks.filter(t => t.status === 'err' || t.status === 'warn').length;
+
+  let head = `<div class="tray-head" data-op="toggle">
+    <span class="tray-title">${run ? '<span class="mini-spin"></span>處理中 ' + run : '工作列'}</span>
+    <span class="tray-counts">${ok ? `<span class="c-ok">✓ ${ok}</span>` : ''}${bad ? `<span class="c-err">✕ ${bad}</span>` : ''}</span>
+    <span class="tray-arrow">${trayOpen ? '收起 ▾' : '展開 ▴'}</span>
+  </div>`;
+  // 收起時顯示最新一筆的一行摘要
+  if (!trayOpen) {
+    const t = tasks[0];
+    head += `<div class="tray-peek st-${t.status}">${taskIcon(t.status)}<b>${escapeHtml(t.name)}</b> ${escapeHtml(t.label)}</div>`;
+    tray.innerHTML = head;
+    return;
+  }
+  let body = '<div class="tray-body">';
+  tasks.forEach(t => {
+    body += `<div class="task st-${t.status}" data-id="${t.id}">
+      <div class="t-head">${taskIcon(t.status)}<span class="t-main"><b>${escapeHtml(t.name)}</b> ${escapeHtml(t.label)}</span><span class="t-time">${fmtTime(t.time)}</span></div>
+      ${t.status === 'run' ? '<div class="t-detail">處理中…可以先處理下一位</div>' : (t.detail ? `<div class="t-detail">${t.detail}</div>` : '')}
+      <div class="t-actions">
+        ${t.status === 'err' ? '<button class="t-btn" data-op="retry">重試</button>' : ''}
+        ${t.status === 'ok' && t.noteCode && !t.noteSaved ? '<button class="t-btn" data-op="note">加這筆收款備注</button>' : ''}
+        ${t.noteSaved ? '<span class="t-saved">備注已存</span>' : ''}
+        ${t.status !== 'run' ? '<button class="t-btn ghost" data-op="dismiss">移除</button>' : ''}
+      </div>
+      ${t.noteOpen ? `<div class="t-note"><input type="text" class="t-note-in" placeholder="例：找零 $50、朋友代付…"><button class="t-btn" data-op="saveNote">儲存</button></div>` : ''}
+    </div>`;
+  });
+  body += '</div>';
+  const doneCount = tasks.filter(t => t.status !== 'run').length;
+  if (doneCount) body += '<div class="tray-foot"><button class="t-btn ghost" data-op="clear">清除已完成</button></div>';
+  // 保留正在輸入的收款備注
+  const typing = {};
+  tray.querySelectorAll('.task').forEach(el => {
+    const inp = el.querySelector('.t-note-in');
+    if (inp) typing[el.dataset.id] = inp.value;
+  });
+  tray.innerHTML = head + body;
+  Object.keys(typing).forEach(id => {
+    const inp = tray.querySelector(`.task[data-id="${id}"] .t-note-in`);
+    if (inp) inp.value = typing[id];
+  });
+}
+
+$('tray').addEventListener('click', async (e) => {
+  const el = e.target.closest('[data-op]');
+  if (!el) return;
+  const op = el.dataset.op;
+  if (op === 'toggle') { trayOpen = !trayOpen; renderTray(); return; }
+  if (op === 'clear') {
+    for (let i = tasks.length - 1; i >= 0; i--) if (tasks[i].status !== 'run') tasks.splice(i, 1);
+    if (!tasks.length) trayOpen = false;
+    renderTray(); return;
+  }
+  const box = e.target.closest('.task');
+  const t = box && tasks.find(x => x.id === Number(box.dataset.id));
+  if (!t) return;
+  if (op === 'retry') { execTask(t); return; }
+  if (op === 'dismiss') { tasks.splice(tasks.indexOf(t), 1); if (!tasks.length) trayOpen = false; renderTray(); return; }
+  if (op === 'note') { t.noteOpen = true; renderTray(); const i = $('tray').querySelector(`.task[data-id="${t.id}"] .t-note-in`); if (i) i.focus(); return; }
+  if (op === 'saveNote') {
+    const inp = box.querySelector('.t-note-in');
+    const note = inp ? inp.value.trim() : '';
+    if (!note) return;
+    el.disabled = true;
+    try {
+      await callAPI('addNote', { staffPassword, scope: 'record', code: t.noteCode, note });
+      t.noteOpen = false; t.noteSaved = true;
+    } catch (err) { toast(err.message, true); }
+    renderTray();
+  }
+});
 
 // ===== v2.5 登記前幹部（含本學期已繳款項退費）=====
 async function doAlumni(m, slot) {
@@ -628,27 +804,24 @@ async function doAlumni(m, slot) {
   slot.querySelectorAll('.rf-chk').forEach(c => c.addEventListener('change', sync));
   sync();
 
-  go.addEventListener('click', async () => {
+  go.addEventListener('click', () => {
     const codes = picked().map(c => c.value);
     const total = picked().reduce((a, c) => a + Number(c.dataset.fee || 0), 0);
     if (!confirm(`確定登記 ${m.name} 為前幹部？` + (total ? `\n會記一筆退費 ${formatMoney(total)}，請現場退還現金。` : ''))) return;
-    go.disabled = true;
-    try {
-      const r = await callAPI('setAlumni', { staffPassword, rowIndex: m.rowIndex, refundCodes: codes });
-      toast('已登記前幹部');
-      await refreshRoster();
-      expandedRow = m.rowIndex;
-      renderMemberList();
-      const nb = $('actions-' + m.rowIndex);
-      if (nb) nb.querySelector('.panel-slot').innerHTML =
-        `<div class="status ok" style="margin-top:10px;"><span>✓</span>${escapeHtml(r.message)}</div>` +
-        (r.receiptCode ? `<div class="detail" style="margin-top:6px;">今天這堂已補開 $0 收據，密碼 <b>${escapeHtml(r.receiptCode)}</b>（社員簽到頁歷史收據可直接點開）。</div>` : '') +
-        (r.refundTotal ? `<div class="code-box" style="border-color:var(--err); background:#fdf2f2;"><div class="code" style="color:var(--err); letter-spacing:0;">退 ${formatMoney(r.refundTotal)}</div><div class="hint">已記 ${r.refundCount} 筆退費，原收據作廢。請現場退還現金。</div></div>` : '');
-    } catch (err) {
-      slot.querySelector('.rf-msg').textContent = err.message;
-      slot.querySelector('.rf-msg').style.color = 'var(--err)';
-      go.disabled = false;
-    }
+    runTask({
+      rowIndex: m.rowIndex, name: m.name,
+      label: '登記前幹部' + (total ? '＋退費 ' + formatMoney(total) : ''),
+      run: () => callAPI('setAlumni', { staffPassword, rowIndex: m.rowIndex, refundCodes: codes }),
+      onOk: (r, t) => {
+        patchMember(m.rowIndex, { identity: 'alumni', fee: 0 });
+        const refund = (r.refundTotal || 0) + (r.alreadyRefundedTotal || 0);
+        if (refund) t.alert = true; // 要退現金 → 工作列自動展開提醒
+        return escapeHtml(m.name) + ' 已登記為前幹部'
+          + (refund ? `<div class="t-refund">請退還現金 ${formatMoney(refund)}</div>` : '')
+          + (r.receiptCode ? `今天這堂已補開 $0 收據，密碼 <b class="t-code">${escapeHtml(r.receiptCode)}</b>` : '');
+      }
+    });
+    collapseCard();
   });
 }
 
@@ -696,37 +869,25 @@ async function doSeries(m, slot, afterDone) {
   slot.querySelectorAll('.sess-chk').forEach(c => c.addEventListener('change', refreshBtn));
   refreshBtn();
 
-  go.addEventListener('click', async () => {
+  go.addEventListener('click', () => {
     const dates = picked();
     if (!dates.length) return;
-    if (!confirm(`確認已向 ${m.name} 收取 ${formatMoney(dates.length * info.perFee)}（${dates.length} 堂）？`)) return;
-    go.disabled = true;
+    const total = dates.length * info.perFee;
+    if (!confirm(`確認已向 ${m.name} 收取 ${formatMoney(total)}（${dates.length} 堂）？`)) return;
     const note = slot.querySelector('.sess-note').value.trim();
-    slot.querySelector('.sess-msg').textContent = '';
-    try {
-      const r = await callAPI('confirmSeries', { staffPassword, rowIndex: m.rowIndex, dates, note });
-      let out = `
-        <div class="status ok" style="margin-top:10px;"><span>✓</span>系列收款完成</div>
-        <div class="detail" style="text-align:center;">
-          <b>${escapeHtml(r.memberName)}</b> 共繳 ${formatMoney(r.total)}（${r.receipts.length} 堂）${r.checkedInToday ? '<br>今日已同時完成簽到' : '<br>今天這堂未含在內，未自動簽到'}
-        </div>
-        <div class="code-list">`;
-      r.receipts.forEach(x => {
-        out += `<div class="ci"><span>第 ${x.index} 堂 ・ ${escapeHtml(x.key)}<br><span style="font-size:12px;color:var(--muted);">${escapeHtml(x.receiptItem)} ・ ${formatMoney(x.fee)}</span></span><b>${escapeHtml(x.code)}</b></div>`;
-      });
-      out += `</div>
-        <div class="detail" style="font-size:13px; text-align:center;">社員簽到頁面會自動跳出全部 ${r.receipts.length} 張收據。<br>網路不順時，可口頭告知任一組密碼備用。</div>
-        <button class="btn secondary sess-done">完成</button>`;
-      slot.innerHTML = out;
-      slot.querySelector('.sess-done').addEventListener('click', async () => {
-        toast('已完成');
-        if (afterDone) afterDone(); else await refreshRoster();
-      });
-    } catch (err) {
-      slot.querySelector('.sess-msg').textContent = err.message;
-      slot.querySelector('.sess-msg').style.color = 'var(--err)';
-      go.disabled = false;
-    }
+    runTask({
+      rowIndex: m.rowIndex, name: m.name,
+      label: `系列收款 ${formatMoney(total)}（${dates.length} 堂）`,
+      dupHint: /已繳過|不可重複/,
+      run: () => callAPI('confirmSeries', { staffPassword, rowIndex: m.rowIndex, dates, note }),
+      onOk: (r) => {
+        if (r.checkedInToday) patchMember(m.rowIndex, { fee: 0, attended: true, relevant: true });
+        return `共收 ${formatMoney(r.total)}（${r.receipts.length} 堂）${r.checkedInToday ? '・今日已簽到' : '・今天未含在內，未自動簽到'}<div class="t-codes">`
+          + r.receipts.map(x => `<span>第${x.index}堂 ${escapeHtml(x.key)} <b class="t-code">${escapeHtml(x.code)}</b></span>`).join('')
+          + '</div>社員頁面會自動跳出全部收據。';
+      }
+    });
+    if (afterDone) afterDone(); else collapseCard();
   });
 }
 
@@ -736,7 +897,7 @@ async function refreshRoster() {
   if (!data.course) showAll = true; // 無課日維持全體名單
   syncFilterUI();
   renderCourseInfo();
-  renderMemberList();
+  rerenderKeepPanel(); // v2.6：背景刷新時不打斷正在操作的卡片
 }
 
 $('btnRefresh').addEventListener('click', async () => {
@@ -779,12 +940,15 @@ $('btnWalkin').addEventListener('click', async () => {
       const canSeries = r.course && r.course.series && m.memberType === 'single';
       slot.innerHTML = `<button class="btn" id="btnWalkinPay">確認已收現金 ${formatMoney(r.fee)}（只繳今天）</button>`
         + (canSeries ? `<button class="btn secondary" id="btnWalkinSeries" style="border-color:#0f6e56; color:#0f6e56;">系列「${escapeHtml(r.course.series)}」多堂一次繳</button>` : '');
-      const walkinDone = async () => {
+      // v2.6：送出收款後立刻清空表單，可以接著幫下一位現場報名
+      const walkinDone = () => {
         $('wName').value = ''; $('wPhone').value = '';
-        await refreshRoster();
+        $('walkinResult').innerHTML = '<div class="detail" style="text-align:center; padding:8px 0;">已送出，處理進度請看下方工作列。可以接著報名下一位。</div>';
+        $('wName').focus();
       };
-      $('btnWalkinPay').addEventListener('click', async () => {
-        await doConfirm(m, slot, walkinDone);
+      $('btnWalkinPay').addEventListener('click', () => {
+        startPayTask({ rowIndex: m.rowIndex, name: m.name, fee: r.fee }, false);
+        walkinDone();
       });
       if (canSeries) {
         $('btnWalkinSeries').addEventListener('click', async () => {
@@ -797,14 +961,14 @@ $('btnWalkin').addEventListener('click', async () => {
       slot.innerHTML = '<div class="detail" style="text-align:center; color:var(--ok);">建檔完成。</div>';
     } else {
       slot.innerHTML = `<button class="btn" id="btnWalkinFree">無需繳費，完成簽到</button>`;
-      $('btnWalkinFree').addEventListener('click', async () => {
-        try {
-          const ar = await callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex });
-          toast(ar.message || `${m.name} 簽到完成`);
-          $('wName').value = ''; $('wPhone').value = '';
-          $('walkinResult').innerHTML = '';
-          await refreshRoster();
-        } catch (e) { toast(e.message, true); }
+      $('btnWalkinFree').addEventListener('click', () => {
+        runTask({
+          rowIndex: m.rowIndex, name: m.name, label: '簽到（免繳）',
+          run: () => callAPI('markAttendance', { staffPassword, rowIndex: m.rowIndex }),
+          onOk: (ar) => escapeHtml(ar.message || '簽到完成') + (ar.receiptCode ? `<br>$0 收據密碼 <b class="t-code">${escapeHtml(ar.receiptCode)}</b>` : '')
+        });
+        $('wName').value = ''; $('wPhone').value = '';
+        $('walkinResult').innerHTML = '<div class="detail" style="text-align:center; padding:8px 0;">已送出，處理進度請看下方工作列。</div>';
       });
     }
   } catch (err) {
