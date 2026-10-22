@@ -77,6 +77,35 @@
   .mini-item:first-child{border-top:none;}
   .mini-item .r{color:var(--muted); white-space:nowrap;}
   h3.sec{font-size:14px; color:var(--muted); margin:18px 0 10px; font-weight:500;}
+  /* v2.4 系列課程 */
+  .badge.series{background:#eaf5f0; color:#0f6e56;}
+  .btn.small.green{background:#0f6e56;}
+  .sess-row{display:flex; align-items:center; gap:10px; color:var(--fg); font-weight:400; padding:10px 0; border-top:1px solid var(--line); font-size:14px; line-height:1.4;}
+  .sess-row:first-of-type{border-top:none;}
+  .sess-row input{width:20px; height:20px; padding:0; flex:none; accent-color:var(--fg);}
+  .sess-row .s-main{flex:1;}
+  .sess-row .s-sub{font-size:12px; color:var(--muted);}
+  .sess-row.disabled{color:var(--muted);}
+  .code-list{background:#f0f7ff; border:2px solid var(--blue); border-radius:12px; padding:12px 16px; margin:14px 0;}
+  .code-list .ci{display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-top:1px solid #d6e3f7; font-size:14px;}
+  .code-list .ci:first-child{border-top:none;}
+  .code-list .ci b{font-size:20px; letter-spacing:.12em; color:var(--blue);}
+  .sx-sessions{display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:8px; margin-bottom:12px;}
+  .sx-sess{background:#fafafa; border-radius:10px; padding:10px; font-size:12px; color:var(--muted); line-height:1.5;}
+  .sx-sess.today{background:#f0f7ff; box-shadow:inset 0 0 0 1.5px var(--blue);}
+  .sx-sess .t{font-size:13px; font-weight:600; color:var(--fg);}
+  .sx-table{width:100%; border-collapse:collapse; font-size:14px;}
+  .sx-table th{font-size:12px; color:var(--muted); font-weight:500; padding:6px 2px; text-align:center;}
+  .sx-table th:first-child, .sx-table td:first-child{text-align:left;}
+  .sx-table td{padding:8px 2px; border-top:1px solid var(--line); text-align:center; vertical-align:middle;}
+  .sx-cell{display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; font-size:13px; font-weight:600;}
+  .sx-cell.paid{background:#e6f4ea; color:var(--ok);}
+  .sx-cell.enrolled{background:#fdf3e3; color:var(--warn);}
+  .sx-cell.none{color:#c4c4c4; font-weight:400;}
+  .sx-cell.att{box-shadow:inset 0 -3px 0 var(--blue);}
+  .sx-legend{display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--muted); margin:6px 0 12px;}
+  .sx-legend span{display:inline-flex; align-items:center; gap:4px;}
+  .sx-legend .sx-cell{width:20px; height:20px; font-size:11px;}
   .toast{position:sticky; bottom:12px; background:var(--fg); color:#fff; padding:12px 16px; border-radius:12px; font-size:14px; text-align:center; display:none; z-index:10;}
   .toast.show{display:block;}
 </style>
@@ -110,6 +139,7 @@
       <div class="tab active" data-tab="roster">名單</div>
       <div class="tab" data-tab="walkin">現場報名</div>
       <div class="tab" data-tab="report">報表</div>
+      <div class="tab" data-tab="series">系列課程</div>
     </div>
 
     <!-- 名單 -->
@@ -144,6 +174,13 @@
       <div id="walkinResult"></div>
     </div>
 
+    <!-- v2.4 系列課程總覽 -->
+    <div class="section" id="tab-series">
+      <div id="seriesContent">
+        <div class="loading"><div class="spinner"></div>載入中...</div>
+      </div>
+    </div>
+
     <!-- 報表 -->
     <div class="section" id="tab-report">
       <div id="reportContent">
@@ -160,10 +197,37 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbyyCMJBLqtjN8rUH6i-IDOrmVyWPpTt99D1_zNDrCOwbbisi6jjlOhPEaIa6VPgV8fN/exec';
 const $ = id => document.getElementById(id);
 
+// XSS 防護：動態文字插入 innerHTML 前一律跳脫。
+// 關鍵：姓名/備注來自公開報名表單，攻擊者可塞入惡意 HTML 竊取幹部密碼（存於 staffPassword 變數）
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 let staffPassword = '';
 let rosterData = null;      // 最近一次 roster 回應
 let showAll = false;        // 名單篩選：今日相關 / 全部
 let expandedRow = null;     // 目前展開操作的 members rowIndex
+
+// v2.2：無課日後台照常開啟（roster.course = null 時的顯示與操作調整）
+function renderCourseInfo() {
+  if (!rosterData) return;
+  if (!rosterData.course) {
+    $('courseInfo').innerHTML = '今日沒有社課<span>名單與資料維護模式</span>';
+    return;
+  }
+  const c = rosterData.course;
+  $('courseInfo').innerHTML = `${escapeHtml(c.name)}<span>${escapeHtml(c.date)} ・ ${rosterData.members.filter(m=>m.relevant).length} 人今日相關${c.series ? ' ・ 系列：' + escapeHtml(c.series) : ''}</span>`;
+}
+
+function syncFilterUI() {
+  $('filterToday').classList.toggle('active', !showAll);
+  $('filterAll').classList.toggle('active', showAll);
+}
 
 function formatMoney(n) { return '$' + Number(n).toLocaleString('zh-TW'); }
 function fmtTime(t) {
@@ -222,9 +286,11 @@ $('btnLogin').addEventListener('click', async () => {
   try {
     const data = await callAPI('roster', { staffPassword });
     rosterData = data;
+    showAll = !data.course; // 無課日直接顯示全體名單
+    syncFilterUI();
     $('loginCard').style.display = 'none';
     $('mainArea').style.display = 'block';
-    $('courseInfo').innerHTML = `${data.course.name}<span>${data.course.date} ・ ${data.members.filter(m=>m.relevant).length} 人今日相關</span>`;
+    renderCourseInfo();
     renderMemberList();
   } catch (err) {
     $('loginMsg').textContent = err.message;
@@ -241,6 +307,7 @@ document.querySelectorAll('.tabs .tab[data-tab]').forEach(tab => {
     tab.classList.add('active');
     $('tab-' + tab.dataset.tab).classList.add('active');
     if (tab.dataset.tab === 'report') loadReport();
+    if (tab.dataset.tab === 'series') loadSeries();
   });
 });
 
@@ -265,7 +332,7 @@ function renderMemberList() {
     list = list.filter(m =>
       String(m.name).toLowerCase().includes(q) || String(m.phoneLast4).includes(q)
     );
-  } else if (!showAll) {
+  } else if (!showAll && rosterData.course) {
     list = list.filter(m => m.relevant);
   }
 
@@ -279,15 +346,15 @@ function renderMemberList() {
     const expanded = expandedRow === m.rowIndex;
     html += `<div class="member-row" data-row="${m.rowIndex}">
       <div class="line1">
-        <div class="name">${m.name}</div>
+        <div class="name">${escapeHtml(m.name)}</div>
         <div class="badges">
           <span class="badge type">${typeLabel(m)}</span>
-          ${m.fee > 0 ? `<span class="badge unpaid">待繳 ${formatMoney(m.fee)}</span>` : `<span class="badge paid">${m.attended ? '已繳／免繳' : '無需繳費'}</span>`}
-          ${m.attended ? '<span class="badge attended">已簽到</span>' : ''}
+          ${rosterData.course ? (m.fee > 0 ? `<span class="badge unpaid">待繳 ${formatMoney(m.fee)}</span>` : `<span class="badge paid">${m.attended ? '已繳／免繳' : '無需繳費'}</span>`) : ''}
+          ${rosterData.course && m.attended ? '<span class="badge attended">已簽到</span>' : ''}
           ${m.note ? '<span class="badge note">有備注</span>' : ''}
         </div>
       </div>
-      <div class="meta">末四碼 ${m.phoneLast4}${!m.relevant ? ' ・ 今天沒報名（收款時會自動加收）' : ''}${m.credit > 0 ? ` ・ 可折抵 ${formatMoney(m.credit)}` : ''}${m.note ? ' ・ 備注：' + m.note : ''}</div>
+      <div class="meta">末四碼 ${m.phoneLast4}${rosterData.course && !m.relevant ? ' ・ 今天沒報名（收款時會自動加收）' : ''}${m.credit > 0 ? ` ・ 可折抵 ${formatMoney(m.credit)}` : ''}${m.note ? ' ・ 備注：' + escapeHtml(m.note) : ''}</div>
       <div class="actions ${expanded ? 'show' : ''}" id="actions-${m.rowIndex}"></div>
     </div>`;
   });
@@ -313,22 +380,32 @@ function renderActions(rowIndex) {
   if (!box) return;
 
   let html = '<div class="action-btns">';
-  if (m.fee > 0) {
-    if (!m.relevant && m.memberType === 'single') {
-      // 今天沒報名的單堂社員：一顆按鈕完成「加收今天＋收款」，不讓幹部選擇困難
-      html += `<button class="btn small warn" data-act="payAdd">加收今天＋收款 ${formatMoney(m.fee)}</button>`;
-    } else {
-      html += `<button class="btn small warn" data-act="pay">收款 ${formatMoney(m.fee)}</button>`;
+  if (rosterData.course) {
+    if (m.fee > 0) {
+      if (!m.relevant && m.memberType === 'single') {
+        // 今天沒報名的單堂社員：一顆按鈕完成「加收今天＋收款」，不讓幹部選擇困難
+        html += `<button class="btn small warn" data-act="payAdd">加收今天＋收款 ${formatMoney(m.fee)}</button>`;
+      } else {
+        html += `<button class="btn small warn" data-act="pay">收款 ${formatMoney(m.fee)}</button>`;
+      }
     }
-  }
-  if (!m.attended) {
-    html += `<button class="btn small blue" data-act="attend">補簽到</button>`;
-  } else {
-    html += `<button class="btn small secondary" data-act="unattend">取消簽到</button>`;
+    // v2.4：今天是系列課 → 單堂社員可一次繳多堂（每堂一張收據）
+    if (rosterData.course.series && m.memberType === 'single') {
+      html += `<button class="btn small green" data-act="series">系列多堂一次繳</button>`;
+    }
+    if (!m.attended) {
+      html += `<button class="btn small blue" data-act="attend">補簽到</button>`;
+    } else {
+      html += `<button class="btn small secondary" data-act="unattend">取消簽到</button>`;
+    }
   }
   html += `<button class="btn small secondary" data-act="change">變更身份／方案</button>`;
   html += `<button class="btn small secondary" data-act="note">備注</button>`;
-  html += '</div><div class="panel-slot"></div>';
+  html += '</div>';
+  if (!rosterData.course) {
+    html += '<div class="detail" style="margin-top:10px;">今日無社課：可變更資料與備注；收款與簽到將於社課當日開放。</div>';
+  }
+  html += '<div class="panel-slot"></div>';
   box.innerHTML = html;
 
   box.querySelectorAll('button[data-act]').forEach(btn => {
@@ -349,10 +426,14 @@ async function handleAction(act, m, box) {
     try {
       await callAPI('updateMember', { staffPassword, rowIndex: m.rowIndex, addToday: true });
     } catch (err) {
-      slot.innerHTML = `<div class="detail" style="color:var(--err);">${err.message}</div>`;
+      slot.innerHTML = `<div class="detail" style="color:var(--err);">${escapeHtml(err.message)}</div>`;
       return;
     }
     await doConfirm(m, slot);
+  }
+
+  if (act === 'series') {
+    await doSeries(m, slot);
   }
 
   if (act === 'attend') {
@@ -364,7 +445,7 @@ async function handleAction(act, m, box) {
       toast(r.message);
       await refreshRoster();
     } catch (err) {
-      slot.innerHTML = `<div class="detail" style="color:var(--err);">${err.message}</div>`;
+      slot.innerHTML = `<div class="detail" style="color:var(--err);">${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -377,7 +458,7 @@ async function handleAction(act, m, box) {
       toast(r.message);
       await refreshRoster();
     } catch (err) {
-      slot.innerHTML = `<div class="detail" style="color:var(--err);">${err.message}</div>`;
+      slot.innerHTML = `<div class="detail" style="color:var(--err);">${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -404,7 +485,8 @@ async function handleAction(act, m, box) {
           staffPassword, rowIndex: m.rowIndex,
           identity: $('chgIdentity').value, memberType: $('chgType').value
         });
-        let msg = `已更新：${typeLabel(r.member)}，今日應繳 ${formatMoney(r.fee)}`;
+        let msg = `已更新：${typeLabel(r.member)}，`;
+        msg += (r.fee == null) ? '費用於社課當日計算' : `今日應繳 ${formatMoney(r.fee)}`;
         if (r.credit > 0) msg += `（已折抵 ${formatMoney(r.credit)}）`;
         if (r.refundHint) msg += '。' + r.refundHint;
         toast('變更完成');
@@ -455,10 +537,10 @@ async function doConfirm(m, slot, afterDone) {
     slot.innerHTML = `
       <div class="status ok" style="margin-top:10px;"><span>✓</span>收款完成</div>
       <div class="detail" style="text-align:center;">
-        <b>${r.memberName}</b> 已繳交 ${formatMoney(r.fee)}<br>${r.receiptItem}
+        <b>${escapeHtml(r.memberName)}</b> 已繳交 ${formatMoney(r.fee)}<br>${escapeHtml(r.receiptItem)}
       </div>
       <div class="code-box">
-        <div class="code">${r.code}</div>
+        <div class="code">${escapeHtml(r.code)}</div>
         <div class="hint">社員的簽到頁面會自動跳出收據，不用報這組碼。<br>（網路不順時才需要口頭告知備用）</div>
       </div>
       <label>這筆收款的備注（選填）</label>
@@ -474,14 +556,94 @@ async function doConfirm(m, slot, afterDone) {
       if (afterDone) afterDone(); else { await refreshRoster(); }
     });
   } catch (err) {
-    slot.innerHTML = `<div class="detail" style="color:var(--err); margin-top:8px;">${err.message}</div>`;
+    slot.innerHTML = `<div class="detail" style="color:var(--err); margin-top:8px;">${escapeHtml(err.message)}</div>`;
   }
+}
+
+// ===== v2.4 系列多堂一次繳（名單列與現場報名共用）=====
+async function doSeries(m, slot, afterDone) {
+  slot.innerHTML = '<div class="loading"><div class="spinner"></div>讀取系列堂次...</div>';
+  let q;
+  try {
+    q = await callAPI('seriesQuote', { staffPassword, rowIndex: m.rowIndex });
+  } catch (err) {
+    slot.innerHTML = `<div class="detail" style="color:var(--err); margin-top:8px;">${escapeHtml(err.message)}</div>`;
+    return;
+  }
+  const info = q.info;
+  if (info.payableCount === 0) {
+    slot.innerHTML = `<div class="detail" style="color:var(--ok); margin-top:8px;">「${escapeHtml(info.series)}」所有堂次都已繳清（或已結束）。</div>`;
+    return;
+  }
+
+  let html = `<div class="inline-panel">
+    <div style="font-weight:600; margin-bottom:4px;">${escapeHtml(info.series)}（共 ${info.count} 堂）</div>
+    <div class="detail" style="font-size:13px; margin-bottom:6px;">每堂 ${formatMoney(info.perFee)}（${q.member.identity === 'student' ? '學生' : '社會人士'}單堂價），勾選要一起繳的堂次：</div>`;
+  info.sessions.forEach(s => {
+    const status = s.paid ? '已繳' : (s.past ? '已結束' : (s.isToday ? '今天' : ''));
+    html += `<label class="sess-row ${s.payable ? '' : 'disabled'}" style="text-transform:none; letter-spacing:0; margin:0;">
+      <input type="checkbox" class="sess-chk" value="${escapeHtml(s.key)}" ${s.payable ? 'checked' : 'disabled'}>
+      <div class="s-main">第 ${s.index} 堂 ・ ${escapeHtml(s.key)}<div class="s-sub">${escapeHtml(s.name || '')}</div></div>
+      <div class="s-sub">${status ? escapeHtml(status) + ' ・ ' : ''}${formatMoney(info.perFee)}</div>
+    </label>`;
+  });
+  html += `<label style="margin-top:10px;">備注（選填）</label>
+    <textarea class="sess-note" rows="2" placeholder="例：找零 $50、朋友代付…"></textarea>
+    <button class="btn sess-go"></button>
+    <div class="detail sess-msg" style="margin-top:8px;"></div>
+  </div>`;
+  slot.innerHTML = html;
+
+  const go = slot.querySelector('.sess-go');
+  const picked = () => Array.from(slot.querySelectorAll('.sess-chk:checked')).map(x => x.value);
+  const refreshBtn = () => {
+    const n = picked().length;
+    go.textContent = n ? `確認已收現金 ${formatMoney(n * info.perFee)}（${n} 堂）` : '請至少勾選一堂';
+    go.disabled = n === 0;
+  };
+  slot.querySelectorAll('.sess-chk').forEach(c => c.addEventListener('change', refreshBtn));
+  refreshBtn();
+
+  go.addEventListener('click', async () => {
+    const dates = picked();
+    if (!dates.length) return;
+    if (!confirm(`確認已向 ${m.name} 收取 ${formatMoney(dates.length * info.perFee)}（${dates.length} 堂）？`)) return;
+    go.disabled = true;
+    const note = slot.querySelector('.sess-note').value.trim();
+    slot.querySelector('.sess-msg').textContent = '';
+    try {
+      const r = await callAPI('confirmSeries', { staffPassword, rowIndex: m.rowIndex, dates, note });
+      let out = `
+        <div class="status ok" style="margin-top:10px;"><span>✓</span>系列收款完成</div>
+        <div class="detail" style="text-align:center;">
+          <b>${escapeHtml(r.memberName)}</b> 共繳 ${formatMoney(r.total)}（${r.receipts.length} 堂）${r.checkedInToday ? '<br>今日已同時完成簽到' : '<br>今天這堂未含在內，未自動簽到'}
+        </div>
+        <div class="code-list">`;
+      r.receipts.forEach(x => {
+        out += `<div class="ci"><span>第 ${x.index} 堂 ・ ${escapeHtml(x.key)}<br><span style="font-size:12px;color:var(--muted);">${escapeHtml(x.receiptItem)} ・ ${formatMoney(x.fee)}</span></span><b>${escapeHtml(x.code)}</b></div>`;
+      });
+      out += `</div>
+        <div class="detail" style="font-size:13px; text-align:center;">社員簽到頁面會自動跳出全部 ${r.receipts.length} 張收據。<br>網路不順時，可口頭告知任一組密碼備用。</div>
+        <button class="btn secondary sess-done">完成</button>`;
+      slot.innerHTML = out;
+      slot.querySelector('.sess-done').addEventListener('click', async () => {
+        toast('已完成');
+        if (afterDone) afterDone(); else await refreshRoster();
+      });
+    } catch (err) {
+      slot.querySelector('.sess-msg').textContent = err.message;
+      slot.querySelector('.sess-msg').style.color = 'var(--err)';
+      go.disabled = false;
+    }
+  });
 }
 
 async function refreshRoster() {
   const data = await callAPI('roster', { staffPassword });
   rosterData = data;
-  $('courseInfo').innerHTML = `${data.course.name}<span>${data.course.date} ・ ${data.members.filter(m=>m.relevant).length} 人今日相關</span>`;
+  if (!data.course) showAll = true; // 無課日維持全體名單
+  syncFilterUI();
+  renderCourseInfo();
   renderMemberList();
 }
 
@@ -509,24 +671,38 @@ $('btnWalkin').addEventListener('click', async () => {
       identity: $('wIdentity').value, memberType: $('wMemberType').value
     });
     const m = r.member;
+    const feeBlock = (r.fee == null)
+      ? '<div style="font-size:15px; color:var(--muted); text-align:center; margin:14px 0;">今日無社課，僅建立報名資料（費用於社課當日計算）</div>'
+      : `<div style="font-size:30px; font-weight:600; text-align:center; margin:14px 0;">${formatMoney(r.fee)}</div>`;
     let html = `
       <div class="card">
         <div class="status ok"><span>✓</span>已建立／更新報名</div>
-        <div class="detail"><b>${m.name}</b>（${m.identity === 'student' ? '學生' : '社會人士'}・${m.memberType === 'semester' ? '學期' : '單堂'}）<br>
-        品名：${r.receiptItem}</div>
-        <div style="font-size:30px; font-weight:600; text-align:center; margin:14px 0;">${formatMoney(r.fee)}</div>
+        <div class="detail"><b>${escapeHtml(m.name)}</b>（${m.identity === 'student' ? '學生' : '社會人士'}・${m.memberType === 'semester' ? '學期' : '單堂'}）${r.receiptItem ? '<br>品名：' + escapeHtml(r.receiptItem) : ''}</div>
+        ${feeBlock}
         <div class="panel-slot"></div>
       </div>`;
     $('walkinResult').innerHTML = html;
     const slot = $('walkinResult').querySelector('.panel-slot');
     if (r.fee > 0) {
-      slot.innerHTML = `<button class="btn" id="btnWalkinPay">確認已收現金 ${formatMoney(r.fee)}</button>`;
+      const canSeries = r.course && r.course.series && m.memberType === 'single';
+      slot.innerHTML = `<button class="btn" id="btnWalkinPay">確認已收現金 ${formatMoney(r.fee)}（只繳今天）</button>`
+        + (canSeries ? `<button class="btn secondary" id="btnWalkinSeries" style="border-color:#0f6e56; color:#0f6e56;">系列「${escapeHtml(r.course.series)}」多堂一次繳</button>` : '');
+      const walkinDone = async () => {
+        $('wName').value = ''; $('wPhone').value = '';
+        await refreshRoster();
+      };
       $('btnWalkinPay').addEventListener('click', async () => {
-        await doConfirm(m, slot, async () => {
-          $('wName').value = ''; $('wPhone').value = '';
-          await refreshRoster();
-        });
+        await doConfirm(m, slot, walkinDone);
       });
+      if (canSeries) {
+        $('btnWalkinSeries').addEventListener('click', async () => {
+          await doSeries(m, slot, walkinDone);
+        });
+      }
+    } else if (r.fee == null) {
+      // 無課日：僅建檔，不提供收款或簽到
+      $('wName').value = ''; $('wPhone').value = '';
+      slot.innerHTML = '<div class="detail" style="text-align:center; color:var(--ok);">建檔完成。</div>';
     } else {
       slot.innerHTML = `<button class="btn" id="btnWalkinFree">無需繳費，完成簽到</button>`;
       $('btnWalkinFree').addEventListener('click', async () => {
@@ -556,28 +732,34 @@ async function loadReport() {
       callAPI('finance', { staffPassword })
     ]);
 
+    // v2.4：今日實收（依收款時間），舊後端沒有此欄位時退回本堂明細
+    const collected = fin.collectedToday || { total: fin.today.total, payments: fin.today.payments };
+    const prepaidTotal = collected.payments.filter(p => p.prepaid).reduce((a, p) => a + (Number(p.fee) || 0), 0);
+
     let html = `
       <div class="stat-grid">
         <div class="stat-box"><div class="num">${stats.attendedCount}<span style="font-size:14px;color:var(--muted);">/${stats.expectedCount}</span></div><div class="lbl">已到 / 應到</div></div>
         <div class="stat-box"><div class="num">${formatMoney(stats.todayTotal)}</div><div class="lbl">本堂收入（${stats.paidCount} 筆）</div></div>
       </div>
       <div class="stat-grid">
-        <div class="stat-box" style="grid-column:1/3; background:#f0f7ff;"><div class="num" style="color:var(--blue);">${formatMoney(fin.semesterTotal)}</div><div class="lbl">${fin.semester} 學期累計收入</div></div>
+        <div class="stat-box" style="background:#eaf5f0;"><div class="num" style="color:#0f6e56;">${formatMoney(collected.total)}</div><div class="lbl">今日實收現金（${collected.payments.length} 筆）</div></div>
+        <div class="stat-box" style="background:#f0f7ff;"><div class="num" style="color:var(--blue);">${formatMoney(fin.semesterTotal)}</div><div class="lbl">${escapeHtml(fin.semester)} 學期累計</div></div>
       </div>
+      ${prepaidTotal > 0 ? `<div class="detail" style="font-size:13px; margin:-4px 0 12px;">今日實收含系列預繳後續堂次 ${formatMoney(prepaidTotal)}；「本堂收入」只計歸屬今天這堂的金額。</div>` : ''}
     `;
 
     if (stats.unpaid.length > 0) {
       html += `<h3 class="sec">尚未繳費（${stats.unpaid.length} 人）</h3><div class="card mini-list">`;
       stats.unpaid.forEach(u => {
-        html += `<div class="mini-item"><span>${u.name}（${u.memberType === 'semester' ? '學期' : '單堂'}・${u.identity === 'student' ? '學生' : '社會'}）</span><span class="r">${formatMoney(u.fee)}</span></div>`;
+        html += `<div class="mini-item"><span>${escapeHtml(u.name)}（${u.memberType === 'semester' ? '學期' : '單堂'}・${u.identity === 'student' ? '學生' : '社會'}）</span><span class="r">${formatMoney(u.fee)}</span></div>`;
       });
       html += '</div>';
     }
 
-    if (fin.today.payments.length > 0) {
-      html += `<h3 class="sec">本堂入帳明細</h3><div class="card mini-list">`;
-      fin.today.payments.forEach(p => {
-        html += `<div class="mini-item"><span>${fmtTime(p.time)} ${p.name}${p.note ? '（注：' + p.note + '）' : ''}<br><span style="font-size:12px;color:var(--muted);">${p.item}</span></span><span class="r">${formatMoney(p.fee)}</span></div>`;
+    if (collected.payments.length > 0) {
+      html += `<h3 class="sec">今日收款明細</h3><div class="card mini-list">`;
+      collected.payments.forEach(p => {
+        html += `<div class="mini-item"><span>${fmtTime(p.time)} ${escapeHtml(p.name)}${p.prepaid ? ' <span class="badge series">預繳 ' + escapeHtml(p.courseDate) + '</span>' : ''}${p.note ? '（注：' + escapeHtml(p.note) + '）' : ''}<br><span style="font-size:12px;color:var(--muted);">${escapeHtml(p.item)}</span></span><span class="r">${formatMoney(p.fee)}</span></div>`;
       });
       html += '</div>';
     }
@@ -585,7 +767,16 @@ async function loadReport() {
     if (fin.byItem.length > 0) {
       html += `<h3 class="sec">本學期收入（分品名）</h3><div class="card mini-list">`;
       fin.byItem.forEach(it => {
-        html += `<div class="mini-item"><span>${it.item}</span><span class="r">${it.count} 筆 ・ ${formatMoney(it.total)}</span></div>`;
+        html += `<div class="mini-item"><span>${escapeHtml(it.item)}</span><span class="r">${it.count} 筆 ・ ${formatMoney(it.total)}</span></div>`;
+      });
+      html += '</div>';
+    }
+
+    // v2.3：各堂金流板塊（每堂課的入帳筆數與金額，最新在前）
+    if (fin.byCourse && fin.byCourse.length > 0) {
+      html += `<h3 class="sec">本學期各堂金流</h3><div class="card mini-list">`;
+      fin.byCourse.forEach(c => {
+        html += `<div class="mini-item"><span>${escapeHtml(c.courseName || '（未命名課程）')}<br><span style="font-size:12px;color:var(--muted);">${escapeHtml(c.date)}</span></span><span class="r">${c.count} 筆 ・ ${formatMoney(c.total)}</span></div>`;
       });
       html += '</div>';
     }
@@ -595,7 +786,7 @@ async function loadReport() {
       html += '<div class="detail">尚無出席紀錄。</div>';
     } else {
       stats.attended.forEach(a => {
-        html += `<div class="mini-item"><span>${a.name}</span><span class="r">${fmtTime(a.time)}</span></div>`;
+        html += `<div class="mini-item"><span>${escapeHtml(a.name)}</span><span class="r">${fmtTime(a.time)}</span></div>`;
       });
     }
     html += '</div>';
@@ -603,7 +794,60 @@ async function loadReport() {
     $('reportContent').innerHTML = html;
     reportLoaded = true;
   } catch (err) {
-    $('reportContent').innerHTML = `<div class="card"><div class="status err"><span>✕</span>${err.message}</div></div>`;
+    $('reportContent').innerHTML = `<div class="card"><div class="status err"><span>✕</span>${escapeHtml(err.message)}</div></div>`;
+  }
+}
+
+// ===== v2.4 系列課程總覽：誰報名／繳費／出席了哪幾堂 =====
+async function loadSeries() {
+  $('seriesContent').innerHTML = '<div class="loading"><div class="spinner"></div>載入中...</div>';
+  try {
+    const data = await callAPI('seriesOverview', { staffPassword });
+    if (!data.series || data.series.length === 0) {
+      $('seriesContent').innerHTML = '<div class="card detail">尚未設定任何系列課程。<br>在 courses 分頁 E 欄（series）為同一系列的每堂課填上相同的系列名稱即可。</div>';
+      return;
+    }
+    let html = '';
+    data.series.forEach(s => {
+      html += `<div class="card">
+        <div style="font-size:17px; font-weight:600;">${escapeHtml(s.name)}</div>
+        <div class="detail" style="font-size:13px; margin:2px 0 12px;">單堂報名 ${s.memberCount} 人 ・ 全系列繳清 ${s.fullCount} 人${s.semesterCount ? ` ・ 另有學期社員 ${s.semesterCount} 人（全堂涵蓋）` : ''}</div>
+        <div class="sx-sessions">`;
+      s.sessions.forEach(x => {
+        html += `<div class="sx-sess ${x.isToday ? 'today' : ''}">
+          <div class="t">第 ${x.index} 堂 ${escapeHtml(x.key)}${x.isToday ? '（今天）' : ''}</div>
+          ${escapeHtml(x.name || '')}<br>
+          報名 ${x.enrolled} ・ 已繳 ${x.paid}<br>
+          ${x.past || x.isToday ? `出席 ${x.attended} ・ ` : ''}${formatMoney(x.revenue)}
+        </div>`;
+      });
+      html += `</div>
+        <div class="sx-legend">
+          <span><span class="sx-cell paid">✓</span>已繳</span>
+          <span><span class="sx-cell enrolled">報</span>報名未繳</span>
+          <span><span class="sx-cell none att">·</span>藍底線＝已出席</span>
+          <span><span class="badge series">套</span>系列一次繳</span>
+        </div>`;
+      if (s.members.length === 0) {
+        html += '<div class="detail">目前沒有單堂社員報名這個系列。</div>';
+      } else {
+        html += `<table class="sx-table"><thead><tr><th>姓名</th>${s.sessions.map(x => `<th>${x.index}<br><span style="font-size:11px;">${escapeHtml(x.key)}</span></th>`).join('')}</tr></thead><tbody>`;
+        s.members.forEach(m => {
+          html += `<tr><td>${escapeHtml(m.name)}${m.bundle ? ' <span class="badge series">套</span>' : ''}<div style="font-size:11px;color:var(--muted);">${escapeHtml(m.phoneLast4)} ・ ${m.paidCount}/${s.sessions.length} 堂已繳</div></td>`;
+          m.cells.forEach(c => {
+            const cls = c.paid ? 'paid' : (c.enrolled ? 'enrolled' : 'none');
+            const txt = c.paid ? '✓' : (c.enrolled ? '報' : '·');
+            html += `<td><span class="sx-cell ${cls} ${c.attended ? 'att' : ''}">${txt}</span></td>`;
+          });
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+      }
+      html += '</div>';
+    });
+    $('seriesContent').innerHTML = html;
+  } catch (err) {
+    $('seriesContent').innerHTML = `<div class="card"><div class="status err"><span>✕</span>${escapeHtml(err.message)}</div></div>`;
   }
 }
 </script>

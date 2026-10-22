@@ -47,6 +47,11 @@
   .detail{font-size:15px; color:var(--muted); line-height:1.6; text-align:center;}
   .detail b{color:var(--fg);}
   footer{margin-top:auto; padding-top:24px; text-align:center; font-size:12px; color:var(--muted);}
+  .multi-nav{display:flex; align-items:center; gap:10px; background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; box-shadow:var(--shadow);}
+  .multi-nav .nav-info{flex:1; text-align:center; font-size:15px; font-weight:600;}
+  .multi-nav .nav-sub{font-size:12px; color:var(--muted); font-weight:400; margin-top:2px;}
+  .nav-btn{width:42px; height:42px; border-radius:10px; border:1.5px solid var(--line); background:#fff; font-size:22px; cursor:pointer; font-family:inherit; color:var(--fg);}
+  .nav-btn:disabled{opacity:.3; cursor:not-allowed;}
   @font-face{font-family:'ChenYuluoyan'; src:url('ChenYuluoyan-2.0-Thin.ttf') format('truetype'); font-weight:400; font-display:swap;}
 </style>
 </head>
@@ -67,6 +72,13 @@
     <div id="resultContent"></div>
   </div>
 
+  <!-- v2.4：多張收據切換（系列一次繳） -->
+  <div class="multi-nav" id="multiNav" style="display:none;">
+    <button class="nav-btn" id="btnPrev" aria-label="上一張">‹</button>
+    <div class="nav-info"><div id="navTitle"></div><div class="nav-sub" id="navSub"></div></div>
+    <button class="nav-btn" id="btnNext" aria-label="下一張">›</button>
+  </div>
+
   <div class="receipt-stage" id="receiptStage">
     <div class="receipt-wrap idle" id="receiptWrap">
       <div class="receipt" id="receipt">
@@ -77,6 +89,7 @@
 
   <div class="actions" id="actions" style="display:none;">
     <button class="btn secondary" id="btnDownload">儲存圖片</button>
+    <button class="btn secondary" id="btnDownloadAll" style="display:none;">儲存全部</button>
     <button class="btn secondary" id="btnReset">領取下一张</button>
   </div>
   <div class="detail" id="dlHint" style="display:none; font-size:13px; margin-top:10px;"></div>
@@ -88,7 +101,20 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbyyCMJBLqtjN8rUH6i-IDOrmVyWPpTt99D1_zNDrCOwbbisi6jjlOhPEaIa6VPgV8fN/exec';
 const $ = id => document.getElementById(id);
 
+// XSS 防護：動態文字插入 innerHTML 前一律跳脫（收據姓名/品名來自公開表單輸入）
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 let currentReceipt = null;
+let receiptList = [];      // v2.4：多張收據（系列一次繳）
+let receiptIdx = 0;
+const uploadedCodes = {};  // 每張只上傳留存一次
 
 // GAS Web App 的回應偶爾會整段失敗（回 Google 的錯誤頁而非 JSON），
 // 這是 Google 端重定向機制不穩，不是資料問題 → 自動重試。
@@ -179,7 +205,8 @@ function showReceipt(receipt) {
     canvas.style.borderRadius = '8px';
 
     // 收據紀錄留存：把生成的收據圖片上傳到後端 Drive（fire-and-forget，失敗不影響顯示）
-    if (receipt.code) {
+    if (receipt.code && !uploadedCodes[receipt.code]) {
+      uploadedCodes[receipt.code] = true;
       try {
         const dataUrl = canvas.toDataURL('image/png');
         callAPI('uploadReceiptImage', { code: receipt.code, imageBase64: dataUrl })
@@ -193,7 +220,7 @@ function showReceipt(receipt) {
 function showResult(type, message) {
   const icon = type === 'ok' ? '✓' : '✕';
   $('resultCard').classList.add('show');
-  $('resultContent').innerHTML = `<div class="status ${type}"><span>${icon}</span>${message}</div>`;
+  $('resultContent').innerHTML = `<div class="status ${type}"><span>${icon}</span>${escapeHtml(message)}</div>`;
   $('receiptStage').classList.remove('show');
   $('actions').style.display = 'none';
 }
@@ -226,17 +253,50 @@ function init3DTilt() {
 
 // 儲存圖片：優先用系統分享表單（iOS 可直接「儲存影像」進相簿），
 // 不支援時退回傳統下載（iOS Safari 會存到「檔案」App → 下載項目）
+async function receiptFile(rc) {
+  const canvas = await renderReceiptCanvas(rc);
+  // 檔名日期用本地時區（records 存的 courseDate 是 UTC ISO，直接拿去當檔名會醜且差一天）
+  const d = new Date(rc.courseDate);
+  const dateStr = isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const fname = `收據_${rc.name}_${dateStr}.png`;
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+  return { blob, file: new File([blob], fname, { type: 'image/png' }), fname };
+}
+
+// v2.4：儲存全部（多張）——支援多檔分享就一次存進相簿，否則逐張下載
+$('btnDownloadAll').addEventListener('click', async () => {
+  if (!receiptList.length) return;
+  $('btnDownloadAll').disabled = true;
+  try {
+    const files = [];
+    for (const rc of receiptList) files.push(await receiptFile(rc));
+    const fileObjs = files.map(f => f.file);
+    if (navigator.canShare && navigator.canShare({ files: fileObjs })) {
+      try {
+        await navigator.share({ files: fileObjs, title: '電子收據' });
+        showDlHint(`在分享選單選「儲存 ${files.length} 張影像」即可全部存進相簿。`);
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+      }
+    }
+    for (const f of files) {
+      const link = document.createElement('a');
+      link.download = f.fname;
+      link.href = URL.createObjectURL(f.blob);
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+      await new Promise(r => setTimeout(r, 400));
+    }
+    showDlHint(`已開始下載 ${files.length} 張。iPhone 請到「檔案」App →「下載項目」查看。`);
+  } finally {
+    $('btnDownloadAll').disabled = false;
+  }
+});
+
 $('btnDownload').addEventListener('click', async () => {
   if (!currentReceipt) return;
-  const canvas = await renderReceiptCanvas(currentReceipt);
-
-  // 檔名日期用本地時區（records 存的 courseDate 是 UTC ISO，直接拿去當檔名會醜且差一天）
-  const d = new Date(currentReceipt.courseDate);
-  const dateStr = isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-  const fname = `收據_${currentReceipt.name}_${dateStr}.png`;
-
-  const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
-  const file = new File([blob], fname, { type: 'image/png' });
+  const { blob, file, fname } = await receiptFile(currentReceipt);
 
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
@@ -271,8 +331,48 @@ $('btnReset').addEventListener('click', () => {
   $('actions').style.display = 'none';
   $('resultCard').classList.remove('show');
   $('dlHint').style.display = 'none';
+  $('multiNav').style.display = 'none';
+  $('btnDownloadAll').style.display = 'none';
+  $('btnDownload').textContent = '儲存圖片';
+  $('formCard').style.display = '';
+  receiptList = [];
   currentReceipt = null;
 });
+
+// ===== v2.4 多張收據 =====
+function showReceiptAt(i) {
+  receiptIdx = Math.max(0, Math.min(receiptList.length - 1, i));
+  currentReceipt = receiptList[receiptIdx];
+  const rc = currentReceipt;
+  $('navTitle').textContent = `第 ${receiptIdx + 1} / ${receiptList.length} 張`;
+  $('navSub').textContent = `${rc.receiptItem || ''} ・ ${formatMoney(rc.fee)}`;
+  $('btnPrev').disabled = receiptIdx === 0;
+  $('btnNext').disabled = receiptIdx === receiptList.length - 1;
+  showReceipt(rc);
+  if (receiptList.length > 1) $('resultCard').classList.add('show'); // 保留「共 N 張」摘要
+}
+$('btnPrev').addEventListener('click', () => showReceiptAt(receiptIdx - 1));
+$('btnNext').addEventListener('click', () => showReceiptAt(receiptIdx + 1));
+
+async function redeemMultiple(codes) {
+  $('formCard').style.display = 'none';
+  $('resultCard').classList.add('show');
+  $('resultContent').innerHTML = `<div style="text-align:center;color:var(--muted);padding:20px 0;">正在領取 ${codes.length} 張收據...</div>`;
+  try {
+    const data = await callAPI('redeemMany', { codes });
+    receiptList = data.receipts || [];
+    if (!receiptList.length) throw new Error('找不到收據');
+    const total = receiptList.reduce((a, r) => a + (Number(r.fee) || 0), 0);
+    $('resultContent').innerHTML = `<div class="status ok"><span>✓</span>共 ${receiptList.length} 張收據，合計 ${formatMoney(total)}</div><div class="detail">左右切換查看每一堂的收據，可按「儲存全部」一次存下。</div>`;
+    $('multiNav').style.display = 'flex';
+    $('btnDownloadAll').style.display = '';
+    $('btnDownload').textContent = '儲存這張';
+    showReceiptAt(0);
+  } catch (err) {
+    $('formCard').style.display = '';
+    showResult('err', err.message || '連線發生問題');
+  }
+}
 
 async function renderReceiptCanvas(receipt) {
   const img = new Image();
@@ -286,15 +386,19 @@ async function renderReceiptCanvas(receipt) {
   ctx.drawImage(img, 0, 0);
 
   // 載入字體
-  await document.fonts.load("47px 'ChenYuluoyan'");
-  await document.fonts.load("30px 'ChenYuluoyan'");
+  // 字體載入失敗（網路不穩）時退回系統字體，不讓整張收據空白
+  try {
+    await document.fonts.load("47px 'ChenYuluoyan'");
+    await document.fonts.load("30px 'ChenYuluoyan'");
+  } catch (e) {}
 
   ctx.fillStyle = '#2b4a9e';
   ctx.font = "47px 'ChenYuluoyan', 'PingFang TC', sans-serif";
   ctx.textBaseline = 'top';
 
   const W = canvas.width, H = canvas.height;
-  const date = new Date(receipt.courseDate);
+  // v2.4：收據日期＝收款日（系列預繳的後續堂次也是今天收的錢）；舊資料沒有 paidAt 時用課程日期
+  const date = new Date(receipt.paidAt || receipt.courseDate);
   const rocYear = date.getFullYear() - 1911;
   const month = date.getMonth() + 1;
   const day = date.getDate();
@@ -308,8 +412,17 @@ async function renderReceiptCanvas(receipt) {
   ctx.fillText(String(month), W * 0.79, H * 0.13);
   ctx.fillText(String(day), W * 0.90, H * 0.13);
 
+  // 品名欄寬有限：太長時自動縮小字級（系列收據品名帶堂次日期，例如「人像攝影講座 10/29」）
+  const itemText = String(receipt.receiptItem || '');
+  const itemMaxW = W * 0.235;
+  let itemSize = 30;
+  ctx.font = `${itemSize}px 'ChenYuluoyan', 'PingFang TC', sans-serif`;
+  while (itemSize > 14 && ctx.measureText(itemText).width > itemMaxW) {
+    itemSize -= 1;
+    ctx.font = `${itemSize}px 'ChenYuluoyan', 'PingFang TC', sans-serif`;
+  }
+  ctx.fillText(itemText, W * 0.09, H * 0.28 + (30 - itemSize) / 2);
   ctx.font = "30px 'ChenYuluoyan', 'PingFang TC', sans-serif";
-  ctx.fillText(receipt.receiptItem, W * 0.09, H * 0.28);
   ctx.fillText('1', W * 0.35, H * 0.28);
   ctx.fillText(feeStr, W * 0.445, H * 0.28);
   ctx.fillText(feeStr, W * 0.57, H * 0.28);
@@ -351,6 +464,13 @@ async function drawStamp(ctx, x, y, size) {
 // 從簽到頁帶 code 過來（receipt.html?code=XXXXXX）：自動填入並直接領取
 (function autoRedeemFromUrl() {
   const params = new URLSearchParams(window.location.search);
+  // v2.4：?codes=a,b,c → 一次領多張
+  const multi = (params.get('codes') || '').split(',').map(s => s.trim()).filter(s => /^\d{6}$/.test(s));
+  if (multi.length > 1) {
+    setTimeout(() => redeemMultiple(multi), 200);
+    return;
+  }
+  if (multi.length === 1) params.set('code', multi[0]);
   const code = (params.get('code') || '').trim();
   if (!/^\d{6}$/.test(code)) return;
   $('code').value = code;

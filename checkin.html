@@ -51,6 +51,9 @@
   .spinner{width:28px; height:28px; border:2px solid var(--line); border-top-color:var(--fg); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 12px;}
   .spinner.blue{border-color:#cfe0f7; border-top-color:var(--blue); width:34px; height:34px;}
   @keyframes spin{to{transform:rotate(360deg);}}
+  .series-box{background:#eaf5f0; border:1.5px solid #0f6e56; border-radius:12px; padding:14px 16px; margin:0 0 16px; font-size:14px; line-height:1.6; color:#0b4f3e;}
+  .series-box .sx-title{font-weight:600; font-size:15px; margin-bottom:4px;}
+  .series-box ul{margin:6px 0 0; padding-left:18px;}
   .manual-toggle{display:block; width:100%; text-align:center; background:none; border:none; color:var(--muted); font-size:13px; text-decoration:underline; cursor:pointer; margin-top:14px; padding:6px; font-family:inherit;}
   .manual-area{display:none; margin-top:8px;}
   .manual-area.show{display:block;}
@@ -87,6 +90,16 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbyyCMJBLqtjN8rUH6i-IDOr
 const SIGNUP_URL = 'https://forms.gle/xWzVMo8VaWkGaDZNA';
 
 const $ = id => document.getElementById(id);
+
+// XSS 防護：動態文字插入 innerHTML 前一律跳脫（姓名/品名等來自公開報名表單，不可信任）
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function formatMoney(n) {
   return '$' + Number(n).toLocaleString('zh-TW');
@@ -165,7 +178,7 @@ $('btnCheckin').addEventListener('click', async () => {
 function showResult(type, message, withSignup) {
   const icon = type === 'ok' ? '✓' : type === 'pay' ? '$' : '✕';
   $('resultCard').classList.add('show');
-  let html = `<div class="status ${type}"><span>${icon}</span>${message}</div>`;
+  let html = `<div class="status ${type}"><span>${icon}</span>${escapeHtml(message)}</div>`;
   if (withSignup) {
     html += `
       <div class="detail" style="margin-bottom:14px;">現場臨時來的嗎？<b>請直接找櫃檯幹部</b>，報名和簽到一次幫你處理好；或先填寫報名表單再回來簽到。</div>
@@ -189,7 +202,12 @@ function startPolling(phone) {
       const r = await callAPI('pollCode', { phone });
       if (r.code) {
         stopPolling();
-        window.location.href = `receipt.html?code=${encodeURIComponent(r.code)}`;
+        // v2.4：系列一次繳 → 同批次多組 code，一次跳到多張收據
+        if (r.codes && r.codes.length > 1) {
+          window.location.href = `receipt.html?codes=${encodeURIComponent(r.codes.join(','))}`;
+        } else {
+          window.location.href = `receipt.html?code=${encodeURIComponent(r.code)}`;
+        }
       }
     } catch (e) {
       // 輪詢失敗（網路抖動）靜默跳過，下一輪再試
@@ -217,7 +235,7 @@ function renderResult(data, phone) {
     let html = `
       <div class="status ok"><span>✓</span>簽到成功</div>
       <div class="detail">
-        <b>${memberName}</b>您已完成今日 <b>${courseName}</b> 簽到。<br>
+        <b>${escapeHtml(memberName)}</b>您已完成今日 <b>${escapeHtml(courseName)}</b> 簽到。<br>
         本堂無需繳費。
       </div>
     `;
@@ -228,8 +246,8 @@ function renderResult(data, phone) {
         html += `
           <a class="history-item" href="receipt.html?code=${encodeURIComponent(h.code)}">
             <div class="info">
-              <div><b>${h.receiptItem || ''}</b></div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px;">${h.courseDate || ''}</div>
+              <div><b>${escapeHtml(h.receiptItem || '')}</b></div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">${escapeHtml(h.courseDate || '')}</div>
             </div>
             <div>
               <span class="tag">${formatMoney(h.fee)}</span>
@@ -243,12 +261,27 @@ function renderResult(data, phone) {
     $('resultContent').innerHTML = html;
   } else {
     // 需要繳費 → 進入等待模式：幹部確認收款後自動跳轉收據
+    // v2.4：今天是系列課 → 提示可一次繳清多堂（實際由幹部收款，社員不用多做任何操作）
+    let seriesHtml = '';
+    if (data.series && data.series.payableCount > 1) {
+      const s = data.series;
+      const items = s.sessions.filter(x => x.payable)
+        .map(x => `<li>第 ${x.index} 堂 ${escapeHtml(x.key)}${x.isToday ? '（今天）' : ''}</li>`).join('');
+      seriesHtml = `
+        <div class="series-box">
+          <div class="sx-title">今天是「${escapeHtml(s.series)}」系列課（共 ${s.count} 堂）</div>
+          想一次繳清嗎？跟櫃檯幹部說「<b>系列一次繳</b>」，${s.payableCount} 堂共 <b>${formatMoney(s.payableTotal)}</b>，
+          每堂各一張收據，會一起出現在這個頁面。
+          <ul>${items}</ul>
+        </div>`;
+    }
     $('resultContent').innerHTML = `
       <div class="status pay"><span>$</span>需要繳費</div>
       <div class="fee-box">
         <div class="amount">${formatMoney(data.fee)}</div>
-        <div class="unit">${data.receiptItem}</div>
+        <div class="unit">${escapeHtml(data.receiptItem)}（只繳今天）</div>
       </div>
+      ${seriesHtml}
       <div class="waiting">
         <div class="spinner blue"></div>
         <div class="msg">等待幹部確認收款中</div>
