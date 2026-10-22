@@ -145,6 +145,19 @@
   .badge.busy{background:#eef2f8; color:var(--blue); display:inline-flex; align-items:center; gap:5px;}
   .badge.busy .mini-spin{width:10px; height:10px; border-top-color:var(--blue);}
   .busy-note{font-size:12px; color:var(--blue); margin-top:8px;}
+  /* v2.7 出席統計＋篩選 */
+  .att-bar{background:#fafafa; border-radius:12px; padding:12px 14px; margin-bottom:12px;}
+  .att-sum{display:flex; align-items:baseline; gap:6px; font-size:14px; color:var(--muted);}
+  .att-sum .big{font-size:24px; font-weight:600; color:var(--fg);}
+  .att-sum .pct{margin-left:auto; font-size:13px;}
+  .att-prog{height:6px; background:var(--line); border-radius:4px; overflow:hidden; margin:8px 0 10px;}
+  .att-prog i{display:block; height:100%; background:var(--blue); border-radius:4px; transition:width .3s;}
+  .chips{display:flex; gap:6px; flex-wrap:wrap;}
+  .chip{padding:7px 12px; font-size:13px; border-radius:20px; border:1.5px solid var(--line); background:#fff; cursor:pointer; font-family:inherit; color:var(--fg); display:inline-flex; align-items:center; gap:5px;}
+  .chip b{font-weight:600;}
+  .chip.active{background:var(--fg); color:#fff; border-color:var(--fg);}
+  .chip.c-in b{color:var(--blue);} .chip.c-out b{color:var(--warn);} .chip.c-unpaid b{color:var(--err);}
+  .chip.active b{color:#fff;}
   .toast{position:fixed; left:50%; transform:translateX(-50%); bottom:14px; max-width:440px; width:calc(100% - 40px); box-sizing:border-box; background:var(--fg); color:#fff; padding:12px 16px; border-radius:12px; font-size:14px; text-align:center; display:none; z-index:30;}
   body.has-tray .toast{bottom:100px;}
   .toast.show{display:block;}
@@ -189,6 +202,8 @@
         <div class="tab active" id="filterToday">今日相關</div>
         <div class="tab" id="filterAll">全部社員</div>
       </div>
+      <!-- v2.7 出席統計＋篩選（有課日才顯示） -->
+      <div id="attBar"></div>
       <div id="memberList"></div>
     </div>
 
@@ -372,8 +387,40 @@ function idLabel(identity, short) {
   return '學生';
 }
 
+// v2.7：出席篩選 all 全部 | in 已到 | out 未到 | unpaid 待繳
+let attFilter = 'all';
+
+// 出席統計：應到 = 今日相關（學期全體＋單堂報今天）＋ 今天實際有來的人（臨時加收、現場報名）
+function renderAttBar() {
+  const bar = $('attBar');
+  if (!rosterData || !rosterData.course) { bar.innerHTML = ''; return; }
+  const base = rosterData.members.filter(m => m.relevant || m.attended);
+  const inN = base.filter(m => m.attended).length;
+  const outN = base.length - inN;
+  const unpaidN = base.filter(m => m.fee > 0).length;
+  const pct = base.length ? Math.round(inN / base.length * 100) : 0;
+  const chip = (key, cls, label, n) =>
+    `<button class="chip ${cls} ${attFilter === key ? 'active' : ''}" data-f="${key}">${label}${n == null ? '' : ` <b>${n}</b>`}</button>`;
+  bar.innerHTML = `<div class="att-bar">
+    <div class="att-sum"><span>已到</span><span class="big">${inN}</span><span>/ 應到 ${base.length}</span><span>・還沒來 ${outN}</span><span class="pct">${pct}%</span></div>
+    <div class="att-prog"><i style="width:${pct}%"></i></div>
+    <div class="chips">
+      ${chip('all', '', '全部', null)}
+      ${chip('in', 'c-in', '已到', inN)}
+      ${chip('out', 'c-out', '還沒來', outN)}
+      ${chip('unpaid', 'c-unpaid', '待繳', unpaidN)}
+    </div>
+  </div>`;
+  bar.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+    attFilter = attFilter === c.dataset.f ? 'all' : c.dataset.f; // 再點一次取消篩選
+    expandedRow = null;
+    renderMemberList();
+  }));
+}
+
 function renderMemberList() {
   if (!rosterData) return;
+  renderAttBar();
   const q = $('searchBox').value.trim().toLowerCase();
   let list = rosterData.members.slice();
 
@@ -383,11 +430,19 @@ function renderMemberList() {
       String(m.name).toLowerCase().includes(q) || String(m.phoneLast4).includes(q)
     );
   } else if (!showAll && rosterData.course) {
-    list = list.filter(m => m.relevant);
+    list = list.filter(m => m.relevant || m.attended);
+  }
+
+  // v2.7：出席篩選（與「今日相關／全部社員」、搜尋可疊加）
+  if (rosterData.course && attFilter !== 'all') {
+    if (attFilter === 'in') list = list.filter(m => m.attended);
+    if (attFilter === 'out') list = list.filter(m => !m.attended);
+    if (attFilter === 'unpaid') list = list.filter(m => m.fee > 0);
   }
 
   if (list.length === 0) {
-    $('memberList').innerHTML = '<div class="detail" style="text-align:center; padding:24px 0;">沒有符合的社員。</div>';
+    const hint = { in: '還沒有人簽到。', out: '應到的人都到齊了！', unpaid: '沒有待繳費的社員。' }[attFilter];
+    $('memberList').innerHTML = `<div class="detail" style="text-align:center; padding:24px 0;">${(!q && hint) || '沒有符合的社員。'}</div>`;
     return;
   }
 
